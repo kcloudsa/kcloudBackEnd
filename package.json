@@ -1,0 +1,49 @@
+{
+  "name": "kcloud-back",
+  "version": "0.1.0",
+  "description": "",
+  "main": "src/index.ts",
+  "scripts": {
+    "clean": "tsc --build --clean",
+    "dev": "nodemon src/index.ts",
+    "build": "tsc",
+    "test": "npm run build && mocha \"./dist/**/*.test.js\"",
+    "start": "npm run build && node dist/server.js"
+  },
+  "author": "Mark Maher",
+  "license": "ISC",
+  "dependencies": {
+    "@auth/express": "^0.11.0",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.0.12",
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.0",
+    "express": "^5.1.0",
+    "express-async-handler": "^1.2.0",
+    "helmet": "^8.1.0",
+    "mongodb": "^6.17.0",
+    "mongoose": "^8.16.2",
+    "morgan": "^1.10.0",
+    "nodemailer": "^6.10.1",
+    "typescript": "^5.8.3",
+    "ulid": "^3.0.1",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/cors": "^2.8.19",
+    "@types/jest": "^30.0.0",
+    "@types/mocha": "^10.0.10",
+    "@types/mongoose": "^5.11.97",
+    "@types/morgan": "^1.9.10",
+    "@types/supertest": "^6.0.3",
+    "jest": "^30.0.4",
+    "mocha": "^10.8.2",
+    "nodemon": "^3.1.10",
+    "supertest": "^7.1.3",
+    "ts-jest": "^29.4.0",
+    "ts-node": "^10.9.2"
+  }
+}
