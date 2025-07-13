@@ -14,7 +14,7 @@
 // // Export for Vercel
 // export default app;
 import express, { Request, Response } from 'express';
-const serverless = require('serverless-http');
+import serverless from 'serverless-http';
 
 const app = express();
 
