@@ -15,9 +15,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // }
 // // Export for Vercel
 // export default app;
-const app_1 = __importDefault(require("../src/app"));
-const http_1 = require("http");
-exports.default = (req, res) => {
-    const server = (0, http_1.createServer)(app_1.default);
-    server.emit('request', req, res);
-};
+const express_1 = __importDefault(require("express"));
+const app = (0, express_1.default)();
+const port = process.env.PORT || 8080;
+app.get('/', (_req, res) => {
+    return res.send('Express Typescript on Vercel');
+});
+app.get('/ping', (_req, res) => {
+    return res.send('pong 🏓');
+});
+app.listen(port, () => {
+    return console.log(`Server is listening on ${port}`);
+});
