@@ -14,18 +14,18 @@
 // // Export for Vercel
 // export default app;
 import express, { Request, Response } from 'express';
+const serverless = require('serverless-http');
 
 const app = express();
-const port = process.env.PORT || 8080;
 
-app.get('/', (_req: Request, res: Response) => {
-  return res.send('Express Typescript on Vercel');
+// Define a route (must be relative to /api/express)
+app.get('/', (req: Request, res: Response) => {
+  res.json({ message: 'Hello from Express on Vercel!' });
+});
+app.get('/ping', (req: Request, res: Response) => {
+  res.json({ message: 'pong', timestamp: Date.now() });
 });
 
-app.get('/ping', (_req: Request, res: Response) => {
-  return res.send('pong 🏓');
-});
-
-app.listen(port, () => {
-  return console.log(`Server is listening on ${port}`);
-});
+// This exposes the Express app as a serverless handler
+module.exports = app;
+module.exports.handler = serverless(app);
