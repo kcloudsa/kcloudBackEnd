@@ -10,7 +10,9 @@ require('dotenv').config();
 // import { AuthAPI } from './api/Auth';
 
 const app = express();
+
 DBConnection();
+
 app.use(morgan('dev'));
 app.use(helmet());
 app.use(cors());

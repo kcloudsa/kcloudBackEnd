@@ -7,12 +7,12 @@ exports.mongoClientPromise = void 0;
 // eslint-disable-next-line import/no-extraneous-dependencies
 const mongoose_1 = __importDefault(require("mongoose"));
 const mongodb_1 = require("mongodb");
-const DBConnection = () => {
+const DBConnection = async () => {
     const dbUri = process.env.DB_URI;
     if (!dbUri) {
         throw new Error('DB_URI environment variable is not defined');
     }
-    mongoose_1.default
+    await mongoose_1.default
         .connect(dbUri)
         .then((conn) => {
         console.log(`Database connected : ${conn.connection.host}`);

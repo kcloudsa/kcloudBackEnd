@@ -2,13 +2,13 @@
 import mongoose from 'mongoose';
 import { MongoClient } from 'mongodb';
 
-const DBConnection = () => {
+const DBConnection = async () => {
   const dbUri = process.env.DB_URI;
 
   if (!dbUri) {
     throw new Error('DB_URI environment variable is not defined');
   }
-  mongoose
+  await mongoose
     .connect(dbUri)
     .then((conn) => {
       console.log(`Database connected : ${conn.connection.host}`);
