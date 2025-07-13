@@ -44,7 +44,7 @@ const middlewares = __importStar(require("./middlewares"));
 const api_1 = __importDefault(require("./api"));
 const DBConnection_1 = __importDefault(require("./Utils/DBConnection"));
 require('dotenv').config();
-const Auth_1 = require("./api/Auth");
+// import { AuthAPI } from './api/Auth';
 const app = (0, express_1.default)();
 (0, DBConnection_1.default)();
 app.use((0, morgan_1.default)('dev'));
@@ -53,7 +53,7 @@ app.use((0, cors_1.default)());
 app.use(express_1.default.json());
 app.set('trust proxy', true);
 // Attach the AuthAPI to handle all /auth/* routes
-app.use('/auth', Auth_1.AuthAPI);
+// app.use('/auth', AuthAPI);
 app.get('/', (req, res) => {
     res.json({
         message: '🦄🌈✨👋🌎🌍🌏✨🌈🦄',

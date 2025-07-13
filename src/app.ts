@@ -7,7 +7,7 @@ import api from './api';
 import MessageResponse from './interfaces/MessageResponse';
 import DBConnection from './Utils/DBConnection';
 require('dotenv').config();
-import { AuthAPI } from './api/Auth';
+// import { AuthAPI } from './api/Auth';
 
 const app = express();
 DBConnection();
@@ -17,7 +17,7 @@ app.use(cors());
 app.use(express.json());
 app.set('trust proxy', true);
 // Attach the AuthAPI to handle all /auth/* routes
-app.use('/auth', AuthAPI);
+// app.use('/auth', AuthAPI);
 
 app.get<{}, MessageResponse>('/', (req, res) => {
   res.json({
