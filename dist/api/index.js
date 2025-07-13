@@ -24,4 +24,10 @@ app.get('/', (_req, res) => {
 app.get('/ping', (_req, res) => {
     res.json({ message: 'pong', timestamp: Date.now() });
 });
+if (process.env.NODE_ENV !== 'production') {
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+        console.log(`🚀 Local server running at http://localhost:${PORT}`);
+    });
+}
 exports.default = (0, serverless_http_1.default)(app);

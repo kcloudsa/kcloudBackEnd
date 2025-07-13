@@ -5,12 +5,12 @@
   "main": "src/index.ts",
   "scripts": {
     "clean": "tsc --build --clean",
-    "dev": "nodemon src/index.ts",
+    "dev": "nodemon api/index.ts",
     "build": "rimraf dist && tsc",
     "ts.check": "tsc --project tsconfig.json",
     "add-build": "git add dist",
     "test": "npm run build && mocha \"./dist/**/*.test.js\"",
-    "start": "npm run build && node dist/server.js"
+    "start": "cross-env NODE_ENV=production npm run build && node dist/api/index.js"
   },
   "pre-commit": [
     "ts.check",
@@ -48,6 +48,7 @@
     "@types/node": "^24.0.13",
     "@types/supertest": "^6.0.3",
     "@vercel/node": "^5.3.5",
+    "cross-env": "^7.0.3",
     "jest": "^30.0.4",
     "mocha": "^10.8.2",
     "nodemon": "^3.1.10",
