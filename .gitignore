@@ -67,12 +67,12 @@ typings/
 .nuxt
 
 # vuepress build output
-.vuepress/dist
+# .vuepress/dist
 
 # Serverless directories
 .serverless
 
-dist
+# dist
 
 # Lock files
 package-lock.json
