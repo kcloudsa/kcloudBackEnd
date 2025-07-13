@@ -4,6 +4,7 @@ import { MongoClient } from 'mongodb';
 
 const DBConnection = () => {
   const dbUri = process.env.DB_URI;
+
   if (!dbUri) {
     throw new Error('DB_URI environment variable is not defined');
   }
