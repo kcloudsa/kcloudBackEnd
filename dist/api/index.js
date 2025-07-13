@@ -20,14 +20,17 @@ const serverless_http_1 = __importDefault(require("serverless-http"));
 const app = (0, express_1.default)();
 app.get('/', (_req, res) => {
     res.json({ message: 'Hello from Express on Vercel!' });
+    return;
 });
 app.get('/ping', (_req, res) => {
     res.json({ message: 'pong', timestamp: Date.now() });
+    return;
 });
 if (process.env.NODE_ENV !== 'production') {
     const PORT = process.env.PORT || 3000;
     app.listen(PORT, () => {
         console.log(`🚀 Local server running at http://localhost:${PORT}`);
+        return;
     });
 }
 exports.default = (0, serverless_http_1.default)(app);
