@@ -18,14 +18,12 @@ import serverless from 'serverless-http';
 
 const app = express();
 
-// Define a route (must be relative to /api/express)
-app.get('/', (req: Request, res: Response) => {
+app.get('/', (_req: Request, res: Response) => {
   res.json({ message: 'Hello from Express on Vercel!' });
 });
-app.get('/ping', (req: Request, res: Response) => {
+
+app.get('/ping', (_req: Request, res: Response) => {
   res.json({ message: 'pong', timestamp: Date.now() });
 });
 
-// This exposes the Express app as a serverless handler
-module.exports = app;
-module.exports.handler = serverless(app);
+export default serverless(app);

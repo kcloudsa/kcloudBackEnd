@@ -18,13 +18,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const serverless_http_1 = __importDefault(require("serverless-http"));
 const app = (0, express_1.default)();
-// Define a route (must be relative to /api/express)
-app.get('/', (req, res) => {
+app.get('/', (_req, res) => {
     res.json({ message: 'Hello from Express on Vercel!' });
 });
-app.get('/ping', (req, res) => {
+app.get('/ping', (_req, res) => {
     res.json({ message: 'pong', timestamp: Date.now() });
 });
-// This exposes the Express app as a serverless handler
-module.exports = app;
-module.exports.handler = (0, serverless_http_1.default)(app);
+exports.default = (0, serverless_http_1.default)(app);
