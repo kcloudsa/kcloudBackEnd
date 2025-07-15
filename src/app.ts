@@ -2,35 +2,88 @@ import express from 'express';
 import morgan from 'morgan';
 import helmet from 'helmet';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
+import mongoSanitize from 'express-mongo-sanitize';
+// import xssClean from 'xss-clean';
 import * as middlewares from './middlewares';
 import api from './api';
 import MessageResponse from './interfaces/MessageResponse';
 import DBConnection from './Utils/DBConnection';
 require('dotenv').config();
-// import { AuthAPI } from './api/Auth';
 
 const app = express();
 
+// Connect to DB
 DBConnection();
 
+// Set basic middleware
 app.use(morgan('dev'));
-app.use(helmet());
-app.use(cors());
 app.use(express.json());
-app.set('trust proxy', true);
-// Attach the AuthAPI to handle all /auth/* routes
-// app.use('/auth', AuthAPI);
+app.set('trust proxy', true); // for HTTPS and rate limiting behind proxy
 
+// Helmet for security headers
+app.use(
+  helmet({
+    contentSecurityPolicy: false, // Adjust based on frontend
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  }),
+);
+
+// Rate Limiter
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(limiter);
+
+// Data sanitization against NoSQL injection and XSS
+app.use(mongoSanitize());
+// app.use(xssClean()); // Prevents XSS attacks
+
+// CORS configuration
+const allowedOrigins = [
+  'https://k-cloud-frontend.vercel.app',
+  'https://www.kcloud.com.sa',
+  'http://localhost:8000',
+];
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+  }),
+);
+
+// Force HTTPS in production (after setting trust proxy)
+// if (process.env.NODE_ENV === 'production') {
+// app.use((req, res, next) => {
+//   if (req.headers['x-forwarded-proto'] !== 'https') {
+//     return res.redirect(`https://${req.headers.host}${req.url}`);
+//   }
+//   next();
+// });
+// }
+
+// Health check
 app.get<{}, MessageResponse>('/', (req, res) => {
   res.json({
-    message: '🦄🌈✨👋🌎🌍🌏✨🌈🦄',
+    message: '✨🌎👋 Hello From Kcloud 👋 🌏✨',
   });
 });
 
-//auth route
-
+// API routes
+// app.use('/auth', AuthAPI);
 app.use('/api/v1', api);
 
+// 404 and error handler
 app.use(middlewares.notFound);
 app.use(middlewares.errorHandler);
 
