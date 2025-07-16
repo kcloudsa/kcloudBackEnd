@@ -4,7 +4,7 @@ import {
   createUnit,
   deleteUnit,
   getUnitById,
-  nameUnit,
+  getUnits,
   updateUnit,
 } from '../../services/unitServices';
 import {
@@ -24,7 +24,7 @@ import {
 
 const router = express.Router();
 
-router.route('/').get(nameUnit).post(createUnit);
+router.route('/').get(getUnits).post(createUnit);
 router.route('/typies').get(getUnitTypes).post(createUnitType);
 router.route('/groups').get(getAllUnitGroups).post(createUnitGroup);
 router.route('/:id').get(getUnitById).patch(updateUnit).delete(deleteUnit);

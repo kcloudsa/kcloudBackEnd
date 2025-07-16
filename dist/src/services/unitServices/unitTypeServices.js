@@ -12,7 +12,6 @@ const unitTypies_1 = require("../../validation/unitTypies");
 exports.nameUnitType = (0, express_async_handler_1.default)(async (req, res) => {
     try {
         const emojis = ['yahia', '😀', '😳', '🙄'];
-        console.log('ddddddd');
         res.json(emojis);
         return;
     }
@@ -36,7 +35,6 @@ exports.createUnitType = (0, express_async_handler_1.default)(async (req, res) =
             res.status(400).json({ message: 'Unit type is required' });
             return;
         }
-        console.log('type', type);
         const existingUnitType = await unitTypeModel_1.UnitTypeModel.findOne({
             type: type,
         });

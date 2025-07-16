@@ -44,7 +44,8 @@ export const createUnit = asyncHandler(async (req: Request, res: Response) => {
     const existingUnit = await UnitModel.findOne({
       number: data.number,
       uniteGroupID: data.uniteGroupID,
-      userID: data.userID,
+      userID: user._id,
+      unitTypeID: data.unitTypeId,
     });
     if (existingUnit) {
       res.status(400).json({
@@ -56,7 +57,7 @@ export const createUnit = asyncHandler(async (req: Request, res: Response) => {
     // Create unit payload
     const unitPayload = {
       uniteGroupID: data.uniteGroupID,
-      userID: data.userID,
+      userID: user._id,
       unitTypeID: data.unitTypeId,
       number: data.number,
       description: data.description,
@@ -103,6 +104,7 @@ export const getUnits = asyncHandler(async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error fetching units:', error);
     res.status(500).json({ message: 'Failed to fetch units', error });
+    return;
   }
 });
 export const getUnitById = asyncHandler(async (req: Request, res: Response) => {
@@ -127,6 +129,7 @@ export const getUnitById = asyncHandler(async (req: Request, res: Response) => {
 export const updateUnit = asyncHandler(async (req: Request, res: Response) => {
   try {
     const userId = req.body.userID;
+
     // Assuming you have a way to fetch the user by ID
     const user: Iuser | null = await UserModel.findOne({
       userID: userId,
@@ -140,27 +143,31 @@ export const updateUnit = asyncHandler(async (req: Request, res: Response) => {
       res.status(400).json({ message: 'Unit ID is required' });
       return;
     }
-    const updateData = req.body.unit;
+    const updateData = req.body;
 
     const existingDoc = await UnitModel.findById(unitId);
     if (!existingDoc) {
-      res.status(404).json({ message: 'User not found' });
+      res.status(404).json({ message: 'Unit not found' });
       return;
     }
-
+    updateData.userID = user._id;
     const mergedData = deepMerge(existingDoc.toObject(), updateData);
+    const original = existingDoc?.toObject();
+
+    const diff = getDeepDiff(original, mergedData);
+    if (!diff || Object.keys(diff).length === 0) {
+      res.status(400).json({ message: 'No changes detected' });
+      return;
+    }
     const updatedUnit = await UnitModel.findByIdAndUpdate(unitId, mergedData, {
       new: true,
       runValidators: true,
-    }).populate('unitTypeID');
+    });
     if (!updatedUnit) {
       res.status(404).json({ message: 'Unit not found' });
       return;
     }
-    const original = existingDoc?.toObject();
-    const updated = updatedUnit.toObject();
 
-    const diff = getDeepDiff(original, updated);
     await recordHistory({
       table: 'Units',
       documentId: updatedUnit._id as Types.ObjectId,

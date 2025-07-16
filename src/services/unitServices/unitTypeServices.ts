@@ -11,7 +11,7 @@ export const nameUnitType = expressAsyncHandler(
   async (req: Request, res: Response) => {
     try {
       const emojis = ['yahia', '😀', '😳', '🙄'];
-      console.log('ddddddd');
+
       res.json(emojis);
       return;
     } catch (error) {
@@ -39,7 +39,7 @@ export const createUnitType = expressAsyncHandler(
         res.status(400).json({ message: 'Unit type is required' });
         return;
       }
-      console.log('type', type);
+
       const existingUnitType = await UnitTypeModel.findOne({
         type: type,
       });

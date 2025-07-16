@@ -9,6 +9,7 @@ import * as middlewares from './middlewares';
 import api from './api';
 import MessageResponse from './interfaces/MessageResponse';
 import DBConnection from './Utils/DBConnection';
+import { validateApiKey } from './middlewares/validateApiKey';
 require('dotenv').config();
 
 const app = express();
@@ -19,7 +20,7 @@ DBConnection();
 // Set basic middleware
 app.use(morgan('dev'));
 app.use(express.json());
-app.set('trust proxy', true); // for HTTPS and rate limiting behind proxy
+// app.set('trust proxy', true); // for HTTPS and rate limiting behind proxy
 
 // Helmet for security headers
 app.use(
@@ -40,14 +41,14 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // Data sanitization against NoSQL injection and XSS
-app.use(mongoSanitize());
+// app.use(mongoSanitize());
 // app.use(xssClean()); // Prevents XSS attacks
 
 // CORS configuration
 const allowedOrigins = [
   'https://k-cloud-frontend.vercel.app',
   'https://www.kcloud.com.sa',
-  'http://localhost:8000',
+  'http://localhost:5173',
 ];
 app.use(
   cors({
@@ -82,6 +83,14 @@ app.get<{}, MessageResponse>('/', (req, res) => {
 // API routes
 // app.use('/auth', AuthAPI);
 app.use('/api/v1', api);
+// app.use('/api/v1', validateApiKey, (req, res, next) => {
+//   res.json({
+//     message: `Hello ${
+//       req.clientInfo && req.clientInfo.label ? req.clientInfo.label : 'Guest'
+//     }`,
+//   });
+//   next();
+// });
 
 // 404 and error handler
 app.use(middlewares.notFound);

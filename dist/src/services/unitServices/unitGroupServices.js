@@ -14,7 +14,6 @@ const deepMerge_1 = require("../../Utils/deepMerge");
 exports.nameUnitGroup = (0, express_async_handler_1.default)(async (req, res) => {
     try {
         const emojis = ['yahia', '😀', '😳', '🙄'];
-        console.log('ddddddd');
         res.json(emojis);
         return;
     }
@@ -26,7 +25,7 @@ exports.nameUnitGroup = (0, express_async_handler_1.default)(async (req, res) =>
 });
 exports.getAllUnitGroups = (0, express_async_handler_1.default)(async (req, res) => {
     try {
-        const groups = await unitGroupModel_1.UnitGroupModel.find({}).populate('unitType');
+        const groups = await unitGroupModel_1.UnitGroupModel.find({});
         if (!groups || groups.length === 0) {
             res.status(404).json({ message: 'No unit groups found' });
             return;
@@ -78,7 +77,6 @@ exports.createUnitGroup = (0, express_async_handler_1.default)(async (req, res) 
         });
         const savedGroup = await newGroup.save();
         if (!savedGroup) {
-            console.log(newGroup);
             res.status(500).json({ message: 'Failed to create unit group' });
             return;
         }
@@ -151,7 +149,6 @@ exports.updateUnitGroup = (0, express_async_handler_1.default)(async (req, res) 
             description,
             unitGroupStatus,
         });
-        console.log('deepMerge', deepMerg);
         const diff = (0, deepDiff_1.getDeepDiff)(existingGroup.toObject(), {
             name: deepMerg.name,
             description: deepMerg.description,
@@ -161,7 +158,6 @@ exports.updateUnitGroup = (0, express_async_handler_1.default)(async (req, res) 
             res.status(400).json({ message: 'No changes detected' });
             return;
         }
-        console.log('diff', diff);
         const updatedGroup = await unitGroupModel_1.UnitGroupModel.findByIdAndUpdate(id, {
             name,
             description,

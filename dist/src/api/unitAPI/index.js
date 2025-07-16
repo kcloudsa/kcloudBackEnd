@@ -8,7 +8,7 @@ const unitServices_1 = require("../../services/unitServices");
 const unitTypeServices_1 = require("../../services/unitServices/unitTypeServices");
 const unitGroupServices_1 = require("../../services/unitServices/unitGroupServices");
 const router = express_1.default.Router();
-router.route('/').get(unitServices_1.nameUnit).post(unitServices_1.createUnit);
+router.route('/').get(unitServices_1.getUnits).post(unitServices_1.createUnit);
 router.route('/typies').get(unitTypeServices_1.getUnitTypes).post(unitTypeServices_1.createUnitType);
 router.route('/groups').get(unitGroupServices_1.getAllUnitGroups).post(unitGroupServices_1.createUnitGroup);
 router.route('/:id').get(unitServices_1.getUnitById).patch(unitServices_1.updateUnit).delete(unitServices_1.deleteUnit);
