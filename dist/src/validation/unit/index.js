@@ -5,7 +5,7 @@ const zod_1 = require("zod");
 exports.createUintSchema = zod_1.z.object({
     uniteGroupID: zod_1.z.string().min(1, 'Unit group ID is required'),
     userID: zod_1.z.string().min(1, 'User ID is required'),
-    unitTypeId: zod_1.z.string().min(1, 'Unit type ID is required'),
+    unitTypeID: zod_1.z.string().min(1, 'Unit type ID is required'),
     number: zod_1.z.string().min(1, 'Unit number is required'),
     description: zod_1.z.string().optional(),
     notes: zod_1.z.string().optional(),

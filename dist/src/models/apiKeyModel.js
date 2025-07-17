@@ -39,6 +39,7 @@ const ApiKeySchema = new mongoose_1.Schema({
     key: { type: String, required: true, unique: true },
     label: { type: String, required: true },
     active: { type: Boolean, default: true },
+    userID: { type: String, required: true },
     createdAt: { type: Date, default: Date.now },
 });
 exports.default = mongoose_1.default.model('ApiKey', ApiKeySchema);

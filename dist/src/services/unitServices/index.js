@@ -47,7 +47,7 @@ exports.createUnit = (0, express_async_handler_1.default)(async (req, res) => {
             number: data.number,
             uniteGroupID: data.uniteGroupID,
             userID: user._id,
-            unitTypeID: data.unitTypeId,
+            unitTypeID: data.unitTypeID,
         });
         if (existingUnit) {
             res.status(400).json({
@@ -59,7 +59,7 @@ exports.createUnit = (0, express_async_handler_1.default)(async (req, res) => {
         const unitPayload = {
             uniteGroupID: data.uniteGroupID,
             userID: user._id,
-            unitTypeID: data.unitTypeId,
+            unitTypeID: data.unitTypeID,
             number: data.number,
             description: data.description,
             notes: data.notes,

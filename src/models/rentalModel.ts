@@ -36,6 +36,34 @@ const rentalSchema = new Schema<Irental>(
       periodicDuration: { type: Number },
       isPercentage: { type: Boolean },
     },
+    specialPrices: [
+      {
+        type: {
+          type: String,
+          enum: ['weekly', 'once', 'monthly'],
+          required: true,
+        },
+        // For `weekly` type
+        dayOfWeek: {
+          type: String,
+          enum: [
+            'Sunday',
+            'Monday',
+            'Tuesday',
+            'Wednesday',
+            'Thursday',
+            'Friday',
+            'Saturday',
+          ],
+        },
+
+        // For `once` type
+        date: Date,
+
+        // Special price
+        price: { type: Number, required: true },
+      },
+    ],
     participats: {
       owner: {
         userID: { type: Schema.Types.ObjectId, ref: 'User' },

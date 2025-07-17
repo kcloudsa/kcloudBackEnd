@@ -45,7 +45,7 @@ export const createUnit = asyncHandler(async (req: Request, res: Response) => {
       number: data.number,
       uniteGroupID: data.uniteGroupID,
       userID: user._id,
-      unitTypeID: data.unitTypeId,
+      unitTypeID: data.unitTypeID,
     });
     if (existingUnit) {
       res.status(400).json({
@@ -58,7 +58,7 @@ export const createUnit = asyncHandler(async (req: Request, res: Response) => {
     const unitPayload = {
       uniteGroupID: data.uniteGroupID,
       userID: user._id,
-      unitTypeID: data.unitTypeId,
+      unitTypeID: data.unitTypeID,
       number: data.number,
       description: data.description,
       notes: data.notes,

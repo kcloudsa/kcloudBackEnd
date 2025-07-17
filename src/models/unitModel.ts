@@ -7,8 +7,8 @@ const locationSchema = new Schema(
     city: { type: String, required: true },
     country: { type: String, required: true },
     geo: {
-      latitude: { type: Number, required: true },
-      longitude: { type: Number, required: true },
+      latitude: { type: Number, required: false },
+      longitude: { type: Number, required: false },
     },
   },
   { _id: false },

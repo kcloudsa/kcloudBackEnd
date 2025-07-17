@@ -3,6 +3,7 @@ import MessageResponse from '../interfaces/MessageResponse';
 import emojis from './emojis';
 import userAPI from './userAPI';
 import unitAPI from './unitAPI';
+import rentalsAPI from './rentalsAPI';
 import apiKey from './apiKey';
 import { validateBody } from '../middlewares/validationBody';
 
@@ -17,6 +18,7 @@ router.get<{}, MessageResponse>('/', (req, res) => {
 //user route
 router.use('/users', userAPI);
 router.use('/units', validateBody(), unitAPI);
-router.use('/emojis', emojis);
+router.use('/rentals', rentalsAPI);
 router.use('/apikeys', apiKey);
+router.use('/emojis', emojis);
 export default router;

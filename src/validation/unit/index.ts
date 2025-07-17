@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const createUintSchema = z.object({
   uniteGroupID: z.string().min(1, 'Unit group ID is required'),
   userID: z.string().min(1, 'User ID is required'),
-  unitTypeId: z.string().min(1, 'Unit type ID is required'),
+  unitTypeID: z.string().min(1, 'Unit type ID is required'),
   number: z.string().min(1, 'Unit number is required'),
   description: z.string().optional(),
   notes: z.string().optional(),
