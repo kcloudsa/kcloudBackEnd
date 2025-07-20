@@ -40,6 +40,13 @@ export interface Irental extends Document {
   roommates: number; // Number of roommates
   status: 'active' | 'completed' | 'inactive' | 'cancelled'; // Status of the rental, e.g., 'active', 'completed', 'cancelled'
   notes: string;
+  rentalStatus:
+    | 'active'
+    | 'terminated'
+    | 'inactive'
+    | 'completed'
+    | 'cancelled';
+  restMonthsLeft?: Number;
   periodicIncrease: IperiodicIncrease; // Periodic increase details
   participats: {
     owner: IParticipant;

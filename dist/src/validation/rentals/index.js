@@ -8,14 +8,14 @@ exports.createRentalSchema = zod_1.z.object({
     moveTypeID: zod_1.z.string().min(1, 'moveTypeID  is required'),
     rentalSourceID: zod_1.z.string().min(1, 'rentalSourceID  is required'),
     startDate: zod_1.z.coerce.date(),
-    endDate: zod_1.z.coerce.date(),
-    startPrice: zod_1.z.number(),
-    currentPrice: zod_1.z.number(),
-    rentalAmount: zod_1.z.number(),
-    securityDeposit: zod_1.z.number(),
+    endDate: zod_1.z.coerce.date().optional(),
+    startPrice: zod_1.z.number().min(0),
+    currentPrice: zod_1.z.number().min(0).optional(),
+    rentalAmount: zod_1.z.number().min(0),
+    securityDeposit: zod_1.z.number().min(0),
     isMonthly: zod_1.z.boolean().optional(),
-    monthsCount: zod_1.z.number().optional(),
-    roommates: zod_1.z.number().optional(),
+    monthsCount: zod_1.z.number().min(0).optional(),
+    roommates: zod_1.z.number().min(0).optional(),
     notes: zod_1.z.string().optional(),
     periodicIncrease: zod_1.z
         .object({
@@ -39,7 +39,7 @@ exports.createRentalSchema = zod_1.z.object({
         ])
             .optional(),
         date: zod_1.z.coerce.date().optional(),
-        price: zod_1.z.number(),
+        price: zod_1.z.number().min(0),
     }))
         .optional(),
     participats: zod_1.z.object({

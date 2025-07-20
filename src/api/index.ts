@@ -18,7 +18,7 @@ router.get<{}, MessageResponse>('/', (req, res) => {
 //user route
 router.use('/users', userAPI);
 router.use('/units', validateBody(), unitAPI);
-router.use('/rentals', rentalsAPI);
+router.use('/rentals', validateBody(), rentalsAPI);
 router.use('/apikeys', apiKey);
 router.use('/emojis', emojis);
 export default router;

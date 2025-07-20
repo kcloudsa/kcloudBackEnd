@@ -6,14 +6,14 @@ export const createRentalSchema = z.object({
   moveTypeID: z.string().min(1, 'moveTypeID  is required'),
   rentalSourceID: z.string().min(1, 'rentalSourceID  is required'),
   startDate: z.coerce.date(),
-  endDate: z.coerce.date(),
-  startPrice: z.number(),
-  currentPrice: z.number(),
-  rentalAmount: z.number(),
-  securityDeposit: z.number(),
+  endDate: z.coerce.date().optional(),
+  startPrice: z.number().min(0),
+  currentPrice: z.number().min(0).optional(),
+  rentalAmount: z.number().min(0),
+  securityDeposit: z.number().min(0),
   isMonthly: z.boolean().optional(),
-  monthsCount: z.number().optional(),
-  roommates: z.number().optional(),
+  monthsCount: z.number().min(0).optional(),
+  roommates: z.number().min(0).optional(),
   notes: z.string().optional(),
   periodicIncrease: z
     .object({
@@ -38,7 +38,7 @@ export const createRentalSchema = z.object({
           ])
           .optional(),
         date: z.coerce.date().optional(),
-        price: z.number(),
+        price: z.number().min(0),
       }),
     )
     .optional(),

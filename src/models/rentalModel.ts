@@ -1,5 +1,48 @@
 import { Schema, model } from 'mongoose';
 import { Irental } from '../interfaces/Irental';
+function calculateDerivedFields(doc: any) {
+  if (!doc) return;
+
+  // 1 - endDateCalc
+  if (doc.isMonthly && doc.startDate && doc.monthsCount) {
+    const end = new Date(doc.startDate);
+    end.setMonth(end.getMonth() + doc.monthsCount);
+    doc.endDate = end;
+  } else {
+    doc.endDate;
+  }
+
+  // 2 - rentalStatus
+  if (doc.isMonthly) {
+    const today = new Date();
+    if (!doc.startDate || !doc.monthsCount) {
+      doc.rentalStatus = doc.status || 'inactive';
+    } else {
+      const end = new Date(doc.startDate);
+      end.setMonth(end.getMonth() + doc.monthsCount);
+      doc.rentalStatus = end < today ? 'terminated' : 'active';
+    }
+  } else {
+    doc.rentalStatus = doc.status;
+  }
+
+  // 3 - restMonthsLeft
+  if (!doc.isMonthly || !doc.startDate || !doc.monthsCount) {
+    doc.restMonthsLeft = 0;
+  } else {
+    const today = new Date();
+    const start = new Date(doc.startDate);
+    if (today < start) {
+      doc.restMonthsLeft = doc.monthsCount;
+    } else {
+      const diffYears = today.getFullYear() - start.getFullYear();
+      const diffMonths = today.getMonth() - start.getMonth();
+      const passedMonths = diffYears * 12 + diffMonths;
+      const rest = doc.monthsCount - passedMonths;
+      doc.restMonthsLeft = rest < 0 ? 0 : rest;
+    }
+  }
+}
 
 const rentalSchema = new Schema<Irental>(
   {
@@ -11,25 +54,19 @@ const rentalSchema = new Schema<Irental>(
       ref: 'MoveType',
     },
     startDate: { type: Date, required: true },
-    endDate: { type: Date, required: true },
+    endDate: { type: Date },
     rentalSourceID: {
       type: Schema.Types.ObjectId,
       required: true,
       ref: 'RentalSource',
     },
-    startPrice: { type: Number, required: true },
-    currentPrice: { type: Number, required: true },
-    status: {
-      type: String,
-      required: true,
-      enum: ['active', 'completed', 'cancelled'],
-      default: 'active',
-    }, // e.g., 'active', 'completed', 'cancelled'
-    securityDeposit: { type: Number, required: true },
-    rentalAmount: { type: Number, required: true },
+    startPrice: { type: Number, required: true, min: 0 },
+    currentPrice: { type: Number, min: 0 },
+    securityDeposit: { type: Number, required: true, min: 0 },
+    rentalAmount: { type: Number, required: true, min: 0 },
     isMonthly: { type: Boolean, default: false },
-    monthsCount: { type: Number, default: 0 },
-    roommates: { type: Number, default: 0 },
+    monthsCount: { type: Number, default: 0, min: 0 },
+    roommates: { type: Number, default: 0, min: 0 },
     notes: { type: String },
     periodicIncrease: {
       increaseValue: { type: Number },
@@ -61,64 +98,53 @@ const rentalSchema = new Schema<Irental>(
         date: Date,
 
         // Special price
-        price: { type: Number, required: true },
+        price: { type: Number, required: true, min: 0 },
       },
     ],
     participats: {
       owner: {
-        userID: { type: Schema.Types.ObjectId, ref: 'User' },
+        userID: { type: String },
         role: { type: String, enum: ['owner'], default: 'owner' },
       },
       tentant: {
-        userID: { type: Schema.Types.ObjectId, ref: 'User' },
+        userID: { type: String },
         role: { type: String, enum: ['tentant'], default: 'tentant' },
       },
     },
+    rentalStatus: {
+      type: String,
+      enum: ['active', 'terminated', 'inactive', 'completed', 'cancelled'],
+    },
+    restMonthsLeft: { type: Number },
   },
   {
     timestamps: true,
   },
 );
-
-// 2 - Virtual: endDate (calculated)
-rentalSchema.virtual('endDate').get(function () {
-  if (this.isMonthly) {
-    if (!this.startDate || !this.monthsCount) return null;
-
-    const end = new Date(this.startDate);
-    end.setMonth(end.getMonth() + this.monthsCount);
-    return end;
-  } else {
-    return this.endDate;
+rentalSchema.pre('save', function (next) {
+  if (
+    (this.isNew && this.currentPrice === undefined) ||
+    this.currentPrice === null
+  ) {
+    this.currentPrice = this.startPrice;
+  }
+  next();
+});
+rentalSchema.post('find', function (docs) {
+  for (const doc of docs) {
+    calculateDerivedFields(doc);
   }
 });
 
-// 3 - Virtual: status (based on dynamic endDate)
-rentalSchema.virtual('status').get(function () {
-  if (this.isMonthly) {
-    if (this.status === 'inactive') return 'inactive';
-    const today = new Date();
-    const end = new Date(this.startDate);
-    end.setMonth(end.getMonth() + this.monthsCount);
-    return end < today ? 'terminated' : 'active';
-  } else {
-    return this.status;
-  }
+// Apply logic after .findOne() or .findById()
+rentalSchema.post('findOne', function (doc) {
+  calculateDerivedFields(doc);
 });
 
-// 4 - Virtual: restMonthsLeft (real-time remaining months)
-rentalSchema.virtual('restMonthsLeft').get(function () {
-  if (!this.isMonthly) return 0; // If not monthly, no remaining months
-  if (!this.startDate || !this.monthsCount) return 0;
-  const today = new Date();
-  const start = new Date(this.startDate);
-  if (today < start) return this.monthsCount;
-  const diffYears = today.getFullYear() - start.getFullYear();
-  const diffMonths = today.getMonth() - start.getMonth();
-  const passedMonths = diffYears * 12 + diffMonths;
-  const rest = this.monthsCount - passedMonths;
-  return rest < 0 ? 0 : rest;
+rentalSchema.post('findOneAndUpdate', function (doc) {
+  calculateDerivedFields(doc);
 });
+
 export const RentalModel = model<Irental>('Rental', rentalSchema);
 
 //const rental = await RentalModel.findById(rentalId).lean({ virtuals: true });

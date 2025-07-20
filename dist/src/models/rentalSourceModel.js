@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.RentalSourceModel = void 0;
 const mongoose_1 = require("mongoose");
 const rentalSourceSchema = new mongoose_1.Schema({
-    name: {
+    SourceName: {
         type: String,
         required: true,
         unique: true,

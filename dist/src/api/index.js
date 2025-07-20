@@ -19,7 +19,7 @@ router.get('/', (req, res) => {
 //user route
 router.use('/users', userAPI_1.default);
 router.use('/units', (0, validationBody_1.validateBody)(), unitAPI_1.default);
-router.use('/rentals', rentalsAPI_1.default);
+router.use('/rentals', (0, validationBody_1.validateBody)(), rentalsAPI_1.default);
 router.use('/apikeys', apiKey_1.default);
 router.use('/emojis', emojis_1.default);
 exports.default = router;

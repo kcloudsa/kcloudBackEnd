@@ -2,7 +2,7 @@ import { Schema, model } from 'mongoose';
 import { IrentalSource } from '../interfaces/IrentalSource';
 const rentalSourceSchema = new Schema<IrentalSource>(
   {
-    name: {
+    SourceName: {
       type: String,
       required: true,
       unique: true,
