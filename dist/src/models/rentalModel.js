@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RentalModel = void 0;
 const mongoose_1 = require("mongoose");
+const calculateTotalRent_1 = require("../Utils/calculateTotalRent");
 function calculateDerivedFields(doc) {
     if (!doc)
         return;
@@ -27,7 +28,7 @@ function calculateDerivedFields(doc) {
         }
     }
     else {
-        doc.rentalStatus = doc.status;
+        doc.rentalStatus;
     }
     // 3 - restMonthsLeft
     if (!doc.isMonthly || !doc.startDate || !doc.monthsCount) {
@@ -124,6 +125,28 @@ rentalSchema.pre('save', function (next) {
     if ((this.isNew && this.currentPrice === undefined) ||
         this.currentPrice === null) {
         this.currentPrice = this.startPrice;
+    }
+    if (this.startPrice &&
+        this.periodicIncrease != null &&
+        this.periodicIncrease?.isPercentage) {
+        if (this.startPrice &&
+            this.periodicIncrease != null &&
+            this.periodicIncrease?.increaseValue) {
+            this.rentalAmount = (0, calculateTotalRent_1.calculateTotalRentInPercentage)(this.startPrice, this.periodicIncrease?.increaseValue, this.periodicIncrease?.periodicDuration);
+        }
+        else {
+            this.rentalAmount = this.startPrice;
+        }
+    }
+    else {
+        if (this.startPrice &&
+            this.periodicIncrease != null &&
+            this.periodicIncrease.increaseValue) {
+            this.rentalAmount = (0, calculateTotalRent_1.calcFixedIncreaseRent)(this.startPrice, this.periodicIncrease.increaseValue, this.periodicIncrease.periodicDuration);
+        }
+        else {
+            this.rentalAmount = this.startPrice;
+        }
     }
     next();
 });

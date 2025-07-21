@@ -1,5 +1,9 @@
 import { Schema, model } from 'mongoose';
 import { Irental } from '../interfaces/Irental';
+import {
+  calcFixedIncreaseRent,
+  calculateTotalRentInPercentage,
+} from '../Utils/calculateTotalRent';
 function calculateDerivedFields(doc: any) {
   if (!doc) return;
 
@@ -23,7 +27,7 @@ function calculateDerivedFields(doc: any) {
       doc.rentalStatus = end < today ? 'terminated' : 'active';
     }
   } else {
-    doc.rentalStatus = doc.status;
+    doc.rentalStatus;
   }
 
   // 3 - restMonthsLeft
@@ -127,6 +131,40 @@ rentalSchema.pre('save', function (next) {
     this.currentPrice === null
   ) {
     this.currentPrice = this.startPrice;
+  }
+
+  if (
+    this.startPrice &&
+    this.periodicIncrease != null &&
+    this.periodicIncrease?.isPercentage
+  ) {
+    if (
+      this.startPrice &&
+      this.periodicIncrease != null &&
+      this.periodicIncrease?.increaseValue
+    ) {
+      this.rentalAmount = calculateTotalRentInPercentage(
+        this.startPrice,
+        this.periodicIncrease?.increaseValue,
+        this.periodicIncrease?.periodicDuration,
+      );
+    } else {
+      this.rentalAmount = this.startPrice;
+    }
+  } else {
+    if (
+      this.startPrice &&
+      this.periodicIncrease != null &&
+      this.periodicIncrease.increaseValue
+    ) {
+      this.rentalAmount = calcFixedIncreaseRent(
+        this.startPrice,
+        this.periodicIncrease.increaseValue,
+        this.periodicIncrease.periodicDuration,
+      );
+    } else {
+      this.rentalAmount = this.startPrice;
+    }
   }
   next();
 });

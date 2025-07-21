@@ -3,13 +3,12 @@ import asyncHandler from 'express-async-handler';
 import UserModel from '../../models/userModel';
 import Iuser from '../../interfaces/Iuser';
 import { createRentalSchema } from '../../validation/rentals';
-import { UnitModel } from '../../models/unitModel';
 import { MoveTypeModel } from '../../models/moveTypeModel';
 import { ImoveType } from '../../interfaces/ImoveType';
 import { RentalModel } from '../../models/rentalModel';
 import { IrentalSource } from '../../interfaces/IrentalSource';
 import { RentalSourceModel } from '../../models/rentalSourceModel';
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import { recordHistory } from '../../Utils/recordHistory';
 export const nameRental = asyncHandler(async (req: Request, res: Response) => {
   try {
@@ -37,7 +36,7 @@ export const createRental = asyncHandler(
         moveTypeID,
         rentalSourceID,
         contractNumber,
-        unitID,
+        rentalID,
         startDate,
         participats,
       } = req.body;
@@ -65,11 +64,11 @@ export const createRental = asyncHandler(
         return;
       }
 
-      // Check if unit already exists
+      // Check if rental already exists
       const existingRental = await RentalModel.findOne({
         contractNumber,
         moveTypeID,
-        unitID,
+        rentalID,
         startDate,
         'participats.owner.userID': participats?.owner?.userID,
         'participats.tentant.userID': participats?.tentant?.userID,
@@ -87,7 +86,7 @@ export const createRental = asyncHandler(
         return;
       }
       await recordHistory({
-        table: 'Unit',
+        table: 'rental',
         documentId: newRental._id as Types.ObjectId,
         action: 'create', // or 'update' based on your logic
         performedBy: {
@@ -96,11 +95,11 @@ export const createRental = asyncHandler(
           role: user.role,
         },
         diff: newRental.toObject(), // Assuming you want to log the entire user object
-        reason: 'User create new unit', // optional
+        reason: 'User create new rental', // optional
       });
       res.status(201).json({
         message: 'rental created successfully',
-        unit: newRental,
+        rental: newRental,
       });
     } catch (error) {
       console.error('Error creating rental:', error);
@@ -115,8 +114,84 @@ export const getAllRentals = asyncHandler(
       res.json(rentals);
       return;
     } catch (error) {
-      console.error('Error fetching unit types:', error);
-      res.status(500).json({ message: 'Failed to fetch unit types', error });
+      console.error('Error fetching rental types:', error);
+      res.status(500).json({ message: 'Failed to fetch rental types', error });
+      return;
+    }
+  },
+);
+export const getRentalByID = asyncHandler(
+  async (req: Request, res: Response) => {
+    try {
+      const rentalId = req.params.id;
+      if (!rentalId) {
+        res.status(400).json({ message: 'Rental ID is required' });
+        return;
+      }
+      if (!mongoose.Types.ObjectId.isValid(rentalId)) {
+        res.status(400).json({ message: 'Invalid rental ID format' });
+        return;
+      }
+      const rental = await RentalModel.findById(rentalId);
+      console.log('rental', rental);
+      if (!rental) {
+        res.status(404).json({ message: 'rental not found' });
+        return;
+      }
+
+      res.json(rental);
+      return;
+    } catch (error) {
+      console.error('Error fetching rental types:', error);
+      res.status(500).json({ message: 'Failed to fetch rental types', error });
+      return;
+    }
+  },
+);
+export const deleteRental = asyncHandler(
+  async (req: Request, res: Response) => {
+    try {
+      const userId = req.body.userID;
+      // Assuming you have a way to fetch the user by ID
+      const user: Iuser | null = await UserModel.findOne({ userID: userId });
+      if (!user) {
+        res.status(404).json({ message: 'User not found' });
+        return;
+      }
+      const rentalId = req.params.id;
+      if (!rentalId) {
+        res.status(400).json({ message: 'Rental ID is required' });
+        return;
+      }
+      if (!mongoose.Types.ObjectId.isValid(rentalId)) {
+        res.status(400).json({ message: 'Invalid rental ID format' });
+        return;
+      }
+      const deletedrental = await RentalModel.findByIdAndDelete(rentalId);
+      if (!deletedrental) {
+        res.status(404).json({ message: 'rental not found' });
+        return;
+      }
+      await recordHistory({
+        table: 'rental',
+        documentId: deletedrental._id as Types.ObjectId,
+        action: 'delete', // or 'update' based on your logic
+        performedBy: {
+          userId: user._id as Types.ObjectId,
+          name: user.userName.slug,
+          role: user.role,
+        },
+        diff: deletedrental.toObject(), // Assuming you want to log the entire user object
+        reason: 'User delete rental', // optional
+      });
+      res.json({
+        message: 'rental deleted successfully',
+        rental: deletedrental,
+      });
+      return;
+    } catch (error) {
+      console.error('Error fetching rental :', error);
+      res.status(500).json({ message: 'Failed to fetch rental ', error });
       return;
     }
   },

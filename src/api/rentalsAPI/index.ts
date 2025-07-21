@@ -6,7 +6,9 @@ import {
 } from '../../services/userServices';
 import {
   createRental,
+  deleteRental,
   getAllRentals,
+  getRentalByID,
   nameRental,
 } from '../../services/rentalSevices';
 import {
@@ -23,6 +25,6 @@ const router = express.Router();
 router.route('/').get(getAllRentals).post(createRental);
 router.route('/movetype').get(getmoveTypes).post(createMoveType);
 router.route('/rentalsource').get(getRentalSources).post(createRentalSource);
-router.route('/:id').get(getUserById).patch(updateUser).delete(deleteUser);
+router.route('/:id').get(getRentalByID).patch(updateUser).delete(deleteRental);
 
 export default router;

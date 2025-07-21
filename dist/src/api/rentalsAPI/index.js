@@ -12,5 +12,5 @@ const router = express_1.default.Router();
 router.route('/').get(rentalSevices_1.getAllRentals).post(rentalSevices_1.createRental);
 router.route('/movetype').get(moveTypeServices_1.getmoveTypes).post(moveTypeServices_1.createMoveType);
 router.route('/rentalsource').get(rentalSource_1.getRentalSources).post(rentalSource_1.createRentalSource);
-router.route('/:id').get(userServices_1.getUserById).patch(userServices_1.updateUser).delete(userServices_1.deleteUser);
+router.route('/:id').get(rentalSevices_1.getRentalByID).patch(userServices_1.updateUser).delete(rentalSevices_1.deleteRental);
 exports.default = router;
