@@ -132,7 +132,13 @@ rentalSchema.pre('save', function (next) {
   ) {
     this.currentPrice = this.startPrice;
   }
-
+  if (this.isMonthly && this.startDate && this.monthsCount) {
+    const end = new Date(this.startDate);
+    end.setMonth(end.getMonth() + this.monthsCount);
+    this.endDate = end;
+  } else {
+    this.endDate;
+  }
   if (
     this.startPrice &&
     this.periodicIncrease != null &&

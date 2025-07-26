@@ -3,7 +3,7 @@ import { Inotification } from '../interfaces/Inotification';
 
 const notificationSchema = new Schema<Inotification>(
   {
-    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    userID: { type: String, required: true },
     type: {
       type: String,
       required: [true, 'type is required'],
@@ -18,7 +18,7 @@ const notificationSchema = new Schema<Inotification>(
     timestamps: true, // Automatically adds createdAt and updatedAt fields
   },
 );
-
+notificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 1209600 });
 export const NotificationModel = model<Inotification>(
   'Notification',
   notificationSchema,

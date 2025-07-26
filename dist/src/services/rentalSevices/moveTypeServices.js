@@ -82,8 +82,8 @@ exports.createMoveType = (0, express_async_handler_1.default)(async (req, res) =
         return;
     }
     catch (error) {
-        console.error('Error fetching emojis:', error);
-        res.status(500).json({ message: 'Failed to fetch emojis', error });
+        console.error('Error fetching Move type :', error);
+        res.status(500).json({ message: 'Failed to fetch Move type ', error });
         return;
     }
 });

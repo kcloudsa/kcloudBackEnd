@@ -2,7 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createRentalSchema = void 0;
 const zod_1 = require("zod");
-exports.createRentalSchema = zod_1.z.object({
+exports.createRentalSchema = zod_1.z
+    .object({
     unitID: zod_1.z.string().min(1, 'Unit ID is required'),
     contractNumber: zod_1.z.string().min(1, 'Contract Number is required'),
     moveTypeID: zod_1.z.string().min(1, 'moveTypeID  is required'),
@@ -54,4 +55,19 @@ exports.createRentalSchema = zod_1.z.object({
     }),
     createdAt: zod_1.z.date().default(new Date()),
     updatedAt: zod_1.z.date().default(new Date()),
+})
+    .refine((data) => {
+    // Case 1: If endDate exists, it must be after startDate
+    if (data.endDate && data.endDate <= data.startDate) {
+        return false;
+    }
+    // Case 2: If endDate is not given, must provide valid monthly info
+    if (!data.endDate &&
+        (!data.isMonthly || data.monthsCount === undefined)) {
+        return false;
+    }
+    return true;
+}, {
+    message: 'Either provide a valid endDate after startDate, or set isMonthly with monthsCount > 0',
+    path: ['endDate'], // Optional: could also use 'monthsCount' or general
 });

@@ -10,6 +10,8 @@ import { IrentalSource } from '../../interfaces/IrentalSource';
 import { RentalSourceModel } from '../../models/rentalSourceModel';
 import mongoose, { Types } from 'mongoose';
 import { recordHistory } from '../../Utils/recordHistory';
+import { deepMerge } from '../../Utils/deepMerge';
+import { getDeepDiff } from '../../Utils/deepDiff';
 export const nameRental = asyncHandler(async (req: Request, res: Response) => {
   try {
     const emojis = ['yahia', '😀', '😳', '🙄'];
@@ -22,6 +24,18 @@ export const nameRental = asyncHandler(async (req: Request, res: Response) => {
 export const createRental = asyncHandler(
   async (req: Request, res: Response) => {
     try {
+      const {
+        userID,
+        moveTypeID,
+        rentalSourceID,
+        contractNumber,
+        startDate,
+        participats,
+        monthsCount,
+        isMonthly,
+        endDate,
+        unitID,
+      } = req.body;
       const parsed = createRentalSchema.safeParse(req.body);
       if (!parsed.success) {
         res.status(400).json({
@@ -30,16 +44,53 @@ export const createRental = asyncHandler(
         });
         return;
       }
+      const isMonthlyMode = isMonthly && monthsCount;
+      const hasEndDate = !!endDate;
+
+      if (!isMonthlyMode && !hasEndDate) {
+        res.status(400).json({
+          message:
+            'You must set both isMonthly and monthsCount, or provide an endDate.',
+        });
+        return;
+      }
+      const rentalStart = new Date(startDate);
+      let rentalEnd: Date | null = endDate ? new Date(endDate) : null;
+      rentalStart.setHours(0, 0, 0, 0);
+      rentalEnd?.setHours(0, 0, 0, 0);
+      if (endDate) {
+        rentalEnd = new Date(endDate);
+      } else if (isMonthly && monthsCount) {
+        rentalEnd = new Date(rentalStart);
+        rentalEnd.setMonth(rentalEnd.getMonth() + monthsCount);
+      } else {
+        res.status(400).json({ message: 'Cannot determine rental end date.' });
+        return;
+      }
+      if (rentalEnd <= rentalStart) {
+        res.status(400).json({
+          message: 'endDate must be after startDate',
+        });
+        return;
+      }
+      // Check for overlapping rentals for the same unit (rentalID)
+      const overlappingRental = await RentalModel.findOne({
+        unitID,
+        $and: [
+          { startDate: { $lte: rentalEnd } },
+          { endDate: { $gte: rentalStart } },
+        ],
+      });
+
+      if (overlappingRental) {
+        console.log('Overlapping rental found:', overlappingRental);
+        res.status(400).json({
+          message:
+            'This unit already has a rental during the specified period.',
+        });
+        return;
+      }
       const data = parsed.data; // Now fully typed and safe!
-      const {
-        userID,
-        moveTypeID,
-        rentalSourceID,
-        contractNumber,
-        rentalID,
-        startDate,
-        participats,
-      } = req.body;
       // Assuming you have a way to fetch the user by ID
       const user: Iuser | null = await UserModel.findOne({
         userID,
@@ -66,12 +117,10 @@ export const createRental = asyncHandler(
 
       // Check if rental already exists
       const existingRental = await RentalModel.findOne({
-        contractNumber,
         moveTypeID,
-        rentalID,
+        unitID,
         startDate,
         'participats.owner.userID': participats?.owner?.userID,
-        'participats.tentant.userID': participats?.tentant?.userID,
       });
       if (existingRental) {
         res.status(400).json({
@@ -192,6 +241,77 @@ export const deleteRental = asyncHandler(
     } catch (error) {
       console.error('Error fetching rental :', error);
       res.status(500).json({ message: 'Failed to fetch rental ', error });
+      return;
+    }
+  },
+);
+export const updateRental = asyncHandler(
+  async (req: Request, res: Response) => {
+    try {
+      const userId = req.body.userID;
+      // Assuming you have a way to fetch the user by ID
+      const user: Iuser | null = await UserModel.findOne({
+        userID: userId,
+      });
+      if (!user) {
+        res.status(404).json({ message: 'User not found' });
+        return;
+      }
+      const rentalId = req.params.id;
+      if (!rentalId) {
+        res.status(400).json({ message: 'Rental ID is required' });
+        return;
+      }
+      if (!mongoose.Types.ObjectId.isValid(rentalId)) {
+        res.status(400).json({ message: 'Invalid rental ID format' });
+        return;
+      }
+      const existingDoc = await RentalModel.findById(rentalId);
+      if (!existingDoc) {
+        res.status(404).json({ message: 'Notification not found' });
+        return;
+      }
+      const updateData = req.body;
+      const mergedData = deepMerge(existingDoc.toObject(), updateData);
+
+      const diff = getDeepDiff(existingDoc.toObject(), mergedData);
+      // Find and update the notification
+      if (!diff || Object.keys(diff).length === 0) {
+        res.status(400).json({ message: 'No changes detected' });
+        return;
+      }
+      const rental = await RentalModel.findByIdAndUpdate(rentalId, req.body, {
+        new: true,
+        runValidators: true,
+      })
+        .populate('moveTypeID')
+        .populate('rentalSourceID')
+        .populate('participats.owner.userID')
+        .populate('participats.tentant.userID');
+      if (!rental) {
+        res.status(404).json({ message: 'rental not found' });
+        return;
+      }
+      await recordHistory({
+        table: 'rental',
+        documentId: rental._id as Types.ObjectId,
+        action: 'update', // or 'update' based on your logic
+        performedBy: {
+          userId: user._id as Types.ObjectId,
+          name: user.userName.slug,
+          role: user.role,
+        },
+        diff, // Assuming you want to log the entire user object
+        reason: 'User update rental', // optional
+      });
+      res.json({
+        message: 'rental updated successfully',
+        rental,
+      });
+      return;
+    } catch (error) {
+      console.error('Error updating rental:', error);
+      res.status(500).json({ message: 'Failed to update rental', error });
       return;
     }
   },
