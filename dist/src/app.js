@@ -52,6 +52,8 @@ const app = (0, express_1.default)();
 // Set basic middleware
 app.use((0, morgan_1.default)('dev'));
 app.use(express_1.default.json());
+app.set('case sensitive routing', true);
+app.set('strict routing', true);
 // app.set('trust proxy', true); // for HTTPS and rate limiting behind proxy
 // Helmet for security headers
 app.use((0, helmet_1.default)({
@@ -105,6 +107,9 @@ app.get('/', (req, res) => {
 // API routes
 // app.use('/auth', AuthAPI);
 app.use('/api/v1', api_1.default);
+app.use((req, res) => {
+    res.status(404).json({ error: 'Route not found or incorrect casing.' });
+});
 // app.use('/api/v1', validateApiKey, (req, res, next) => {
 //   res.json({
 //     message: `Hello ${

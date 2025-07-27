@@ -20,6 +20,8 @@ DBConnection();
 // Set basic middleware
 app.use(morgan('dev'));
 app.use(express.json());
+app.set('case sensitive routing', true);
+app.set('strict routing', true);
 // app.set('trust proxy', true); // for HTTPS and rate limiting behind proxy
 
 // Helmet for security headers
@@ -82,7 +84,11 @@ app.get<{}, MessageResponse>('/', (req, res) => {
 
 // API routes
 // app.use('/auth', AuthAPI);
+
 app.use('/api/v1', api);
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found or incorrect casing.' });
+});
 // app.use('/api/v1', validateApiKey, (req, res, next) => {
 //   res.json({
 //     message: `Hello ${

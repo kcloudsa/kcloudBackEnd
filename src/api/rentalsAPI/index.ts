@@ -9,6 +9,8 @@ import {
   deleteRental,
   getAllRentals,
   getRentalByID,
+  getRentalsByUnitID,
+  getRentalsByUserID,
   nameRental,
 } from '../../services/rentalSevices';
 import {
@@ -23,8 +25,10 @@ import {
 const router = express.Router();
 
 router.route('/').get(getAllRentals).post(createRental);
+router.route('/user').get(getRentalsByUserID);
 router.route('/movetype').get(getmoveTypes).post(createMoveType);
 router.route('/rentalsource').get(getRentalSources).post(createRentalSource);
 router.route('/:id').get(getRentalByID).patch(updateUser).delete(deleteRental);
+router.route('/unit/:id').get(getRentalsByUnitID);
 
 export default router;

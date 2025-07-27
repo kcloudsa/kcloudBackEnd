@@ -23,4 +23,5 @@ router.use('/rentals', validateBody(), rentalsAPI);
 router.use('/notification', validateBody(), notification);
 router.use('/apikeys', apiKey);
 router.use('/emojis', emojis);
+
 export default router;

@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateRental = exports.deleteRental = exports.getRentalByID = exports.getAllRentals = exports.createRental = exports.nameRental = void 0;
+exports.getRentalsByUserID = exports.getRentalsByUnitID = exports.updateRental = exports.deleteRental = exports.getRentalByID = exports.getAllRentals = exports.createRental = exports.nameRental = void 0;
 const express_async_handler_1 = __importDefault(require("express-async-handler"));
 const userModel_1 = __importDefault(require("../../models/userModel"));
 const rentals_1 = require("../../validation/rentals");
@@ -290,6 +290,62 @@ exports.updateRental = (0, express_async_handler_1.default)(async (req, res) => 
     catch (error) {
         console.error('Error updating rental:', error);
         res.status(500).json({ message: 'Failed to update rental', error });
+        return;
+    }
+});
+exports.getRentalsByUnitID = (0, express_async_handler_1.default)(async (req, res) => {
+    try {
+        const unitID = req.params.id;
+        if (!unitID) {
+            res.status(400).json({ message: 'Unit ID is required' });
+            return;
+        }
+        if (!mongoose_1.default.Types.ObjectId.isValid(unitID)) {
+            res.status(400).json({ message: 'Invalid unit ID format' });
+            return;
+        }
+        const rentals = await rentalModel_1.RentalModel.find({ unitID })
+            .populate('moveTypeID')
+            .populate('rentalSourceID')
+            .populate('participats.owner.userID')
+            .populate('participats.tentant.userID');
+        if (!rentals || rentals.length === 0) {
+            res.status(404).json({ message: 'No rentals found for this unit' });
+            return;
+        }
+        res.json(rentals);
+        return;
+    }
+    catch (error) {
+        console.error('Error fetching rentals by unit ID:', error);
+        res.status(500).json({ message: 'Failed to fetch rentals', error });
+        return;
+    }
+});
+exports.getRentalsByUserID = (0, express_async_handler_1.default)(async (req, res) => {
+    try {
+        const userID = req.body.userID;
+        if (!userID) {
+            res.status(400).json({ message: 'User ID is required' });
+            return;
+        }
+        const rentals = await rentalModel_1.RentalModel.find({
+            'participats.owner.userID': userID,
+        })
+            .populate('moveTypeID')
+            .populate('rentalSourceID')
+            .populate('participats.owner.userID')
+            .populate('participats.tentant.userID');
+        if (!rentals || rentals.length === 0) {
+            res.status(404).json({ message: 'No rentals found for this user' });
+            return;
+        }
+        res.json(rentals);
+        return;
+    }
+    catch (error) {
+        console.error('Error fetching rentals by user ID:', error);
+        res.status(500).json({ message: 'Failed to fetch rentals', error });
         return;
     }
 });

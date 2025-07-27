@@ -316,3 +316,62 @@ export const updateRental = asyncHandler(
     }
   },
 );
+export const getRentalsByUnitID = asyncHandler(
+  async (req: Request, res: Response) => {
+    try {
+      const unitID = req.params.id;
+      if (!unitID) {
+        res.status(400).json({ message: 'Unit ID is required' });
+        return;
+      }
+      if (!mongoose.Types.ObjectId.isValid(unitID)) {
+        res.status(400).json({ message: 'Invalid unit ID format' });
+        return;
+      }
+      const rentals = await RentalModel.find({ unitID })
+        .populate('moveTypeID')
+        .populate('rentalSourceID')
+        .populate('participats.owner.userID')
+        .populate('participats.tentant.userID');
+      if (!rentals || rentals.length === 0) {
+        res.status(404).json({ message: 'No rentals found for this unit' });
+        return;
+      }
+      res.json(rentals);
+      return;
+    } catch (error) {
+      console.error('Error fetching rentals by unit ID:', error);
+      res.status(500).json({ message: 'Failed to fetch rentals', error });
+      return;
+    }
+  },
+);
+export const getRentalsByUserID = asyncHandler(
+  async (req: Request, res: Response) => {
+    try {
+      const userID = req.body.userID;
+      if (!userID) {
+        res.status(400).json({ message: 'User ID is required' });
+        return;
+      }
+
+      const rentals = await RentalModel.find({
+        'participats.owner.userID': userID,
+      })
+        .populate('moveTypeID')
+        .populate('rentalSourceID')
+        .populate('participats.owner.userID')
+        .populate('participats.tentant.userID');
+      if (!rentals || rentals.length === 0) {
+        res.status(404).json({ message: 'No rentals found for this user' });
+        return;
+      }
+      res.json(rentals);
+      return;
+    } catch (error) {
+      console.error('Error fetching rentals by user ID:', error);
+      res.status(500).json({ message: 'Failed to fetch rentals', error });
+      return;
+    }
+  },
+);
