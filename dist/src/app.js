@@ -45,6 +45,9 @@ const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const middlewares = __importStar(require("./middlewares"));
 const api_1 = __importDefault(require("./api"));
 const DBConnection_1 = __importDefault(require("./Utils/DBConnection"));
+const Auth_1 = require("./api/Auth");
+const cookie_parser_1 = __importDefault(require("cookie-parser"));
+const express_session_1 = __importDefault(require("express-session"));
 require('dotenv').config();
 const app = (0, express_1.default)();
 // Connect to DB
@@ -54,7 +57,20 @@ app.use((0, morgan_1.default)('dev'));
 app.use(express_1.default.json());
 app.set('case sensitive routing', true);
 app.set('strict routing', true);
+app.use((0, cookie_parser_1.default)());
 // app.set('trust proxy', true); // for HTTPS and rate limiting behind proxy
+// Explicitly handle preflight for all routes
+app.use((req, res, next) => {
+    if (req.method === 'OPTIONS') {
+        res.header('Access-Control-Allow-Origin', req.headers.origin);
+        res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+        res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-CSRF-Token, Cache-Control, Cookie');
+        res.header('Access-Control-Allow-Credentials', 'true');
+        res.header('Access-Control-Expose-Headers', 'Set-Cookie, X-CSRF-Token');
+        return res.status(200).end();
+    }
+    next();
+});
 // Helmet for security headers
 app.use((0, helmet_1.default)({
     contentSecurityPolicy: false, // Adjust based on frontend
@@ -77,6 +93,7 @@ const allowedOrigins = [
     'https://k-cloud-frontend.vercel.app',
     'https://www.kcloud.com.sa',
     'http://localhost:5173',
+    'http://localhost:4173',
 ];
 app.use((0, cors_1.default)({
     origin: (origin, callback) => {
@@ -84,10 +101,35 @@ app.use((0, cors_1.default)({
             callback(null, true);
         }
         else {
-            callback(new Error('Not allowed by CORS'));
+            callback(new Error('Not allowed by CORS Get; the hell out of here'));
         }
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: [
+        'Origin',
+        'X-Requested-With',
+        'Content-Type',
+        'Accept',
+        'Authorization',
+        'X-CSRF-Token',
+        'X-Requested-With',
+        'Cache-Control',
+        'Cookie'
+    ],
+    exposedHeaders: ['Set-Cookie', 'X-CSRF-Token'],
+    optionsSuccessStatus: 200 // Some legacy browsers choke on 204
+}));
+// Add session middleware for OAuth state management
+app.use((0, express_session_1.default)({
+    secret: process.env.SESSION_SECRET || 'your-session-secret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true,
+        maxAge: 10 * 60 * 1000 // 10 minutes
+    }
 }));
 // Force HTTPS in production (after setting trust proxy)
 // if (process.env.NODE_ENV === 'production') {
@@ -105,7 +147,7 @@ app.get('/', (req, res) => {
     });
 });
 // API routes
-// app.use('/auth', AuthAPI);
+app.use('/auth', Auth_1.AuthAPI);
 app.use('/api/v1', api_1.default);
 app.use((req, res) => {
     res.status(404).json({ error: 'Route not found or incorrect casing.' });
