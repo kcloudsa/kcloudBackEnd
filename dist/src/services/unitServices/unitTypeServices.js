@@ -73,6 +73,7 @@ exports.createUnitType = (0, express_async_handler_1.default)(async (req, res) =
     }
     catch (error) {
         res.status(500).json({ message: 'Failed to create unit type', error });
+        console.log(error);
         return;
     }
 });

@@ -10,7 +10,7 @@ const unitAPI_1 = __importDefault(require("./unitAPI"));
 const rentalsAPI_1 = __importDefault(require("./rentalsAPI"));
 const apiKey_1 = __importDefault(require("./apiKey"));
 const notification_1 = __importDefault(require("./notification"));
-const validationBody_1 = require("../middlewares/validationBody");
+// import { validateBody } from '../middlewares/validationBody';
 const router = express_1.default.Router();
 router.get('/', (req, res) => {
     res.json({
@@ -19,9 +19,9 @@ router.get('/', (req, res) => {
 });
 //user route
 router.use('/users', userAPI_1.default);
-router.use('/units', (0, validationBody_1.validateBody)(), unitAPI_1.default);
-router.use('/rentals', (0, validationBody_1.validateBody)(), rentalsAPI_1.default);
-router.use('/notification', (0, validationBody_1.validateBody)(), notification_1.default);
+router.use('/units', unitAPI_1.default);
+router.use('/rentals', rentalsAPI_1.default);
+router.use('/notification', notification_1.default);
 router.use('/apikeys', apiKey_1.default);
 router.use('/emojis', emojis_1.default);
 exports.default = router;

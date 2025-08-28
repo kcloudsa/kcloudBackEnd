@@ -6,7 +6,7 @@ import unitAPI from './unitAPI';
 import rentalsAPI from './rentalsAPI';
 import apiKey from './apiKey';
 import notification from './notification';
-import { validateBody } from '../middlewares/validationBody';
+// import { validateBody } from '../middlewares/validationBody';
 
 const router = express.Router();
 
@@ -18,9 +18,9 @@ router.get<{}, MessageResponse>('/', (req, res) => {
 
 //user route
 router.use('/users', userAPI);
-router.use('/units', validateBody(), unitAPI);
-router.use('/rentals', validateBody(), rentalsAPI);
-router.use('/notification', validateBody(), notification);
+router.use('/units', unitAPI);
+router.use('/rentals', rentalsAPI);
+router.use('/notification', notification);
 router.use('/apikeys', apiKey);
 router.use('/emojis', emojis);
 
