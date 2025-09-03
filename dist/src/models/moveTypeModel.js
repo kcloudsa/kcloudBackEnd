@@ -6,12 +6,14 @@ const moveTypeSchema = new mongoose_1.Schema({
     type: {
         type: String,
         required: [true, 'Move type name is required'],
-        enum: ['debit', 'credit'],
-        // This ensures that the name can only be 'debit' or 'credit'
-        // and is not case-sensitive.
         lowercase: true,
         trim: true,
-        // unique: true,
+    },
+    // Accept either ObjectId or string-based user ids (some auth systems use custom ids)
+    userId: {
+        type: mongoose_1.Schema.Types.Mixed,
+        // keep the same validation message
+        required: [true, 'UserID is Required'],
     },
 }, {
     timestamps: true,

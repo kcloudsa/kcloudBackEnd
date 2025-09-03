@@ -6,12 +6,12 @@ const maintenanceRequestSchema = new mongoose_1.Schema({
     unitID: {
         type: mongoose_1.Schema.Types.ObjectId,
         required: true,
-        ref: 'Unit', // Assuming you have a Unit model
+        ref: 'Unit',
     },
     reportedBy: {
-        type: mongoose_1.Schema.Types.ObjectId,
+        type: mongoose_1.Schema.Types.ObjectId || String,
         required: true,
-        ref: 'User', // Assuming you have a User model
+        ref: 'User',
     },
     title: {
         type: String,
@@ -35,6 +35,10 @@ const maintenanceRequestSchema = new mongoose_1.Schema({
         type: Date,
         default: null, // Optional date when the request was resolved
     },
+    credit: {
+        type: Number,
+        default: 0
+    }
 }, {
     timestamps: true, // Automatically manage createdAt and updatedAt fields
 });

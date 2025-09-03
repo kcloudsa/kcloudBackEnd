@@ -1,17 +1,51 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getRentalsByUserID = exports.getRentalsByUnitID = exports.updateRental = exports.deleteRental = exports.getRentalByID = exports.getAllRentals = exports.createRental = exports.nameRental = void 0;
+exports.getRentalsByUserID = exports.getRentalsByUnitID = exports.updateRental = exports.deleteRental = exports.getRentalByID = exports.getAllRentals = exports.createRental = exports.checkContract = exports.nameRental = void 0;
 const express_async_handler_1 = __importDefault(require("express-async-handler"));
 const userModel_1 = __importDefault(require("../../models/userModel"));
 const rentals_1 = require("../../validation/rentals");
 const moveTypeModel_1 = require("../../models/moveTypeModel");
 const rentalModel_1 = require("../../models/rentalModel");
 const rentalSourceModel_1 = require("../../models/rentalSourceModel");
-const mongoose_1 = __importDefault(require("mongoose"));
+const mongoose_1 = __importStar(require("mongoose"));
 const recordHistory_1 = require("../../Utils/recordHistory");
+const statsService_1 = __importDefault(require("../../services/statsService"));
 const deepMerge_1 = require("../../Utils/deepMerge");
 const deepDiff_1 = require("../../Utils/deepDiff");
 exports.nameRental = (0, express_async_handler_1.default)(async (req, res) => {
@@ -24,14 +58,62 @@ exports.nameRental = (0, express_async_handler_1.default)(async (req, res) => {
         res.status(500).json({ message: 'Failed to fetch emojis', error });
     }
 });
+exports.checkContract = (0, express_async_handler_1.default)(async (req, res) => {
+    try {
+        // accept contractNumber from query (GET) or body (POST/GET-with-body)
+        const contractNumber = req.query.contractNumber ||
+            (req.body && req.body.contractNumber) ||
+            undefined;
+        if (!contractNumber) {
+            res
+                .status(400)
+                .json({
+                success: false,
+                message: 'contractNumber is required (query or body)',
+            });
+            return;
+        }
+        const existing = await rentalModel_1.RentalModel.findOne({
+            contractNumber: String(contractNumber),
+        }).lean();
+        if (existing) {
+            res.json({ success: true, exists: true, rental: existing });
+            return;
+        }
+        res.json({ success: true, exists: false });
+        return;
+    }
+    catch (error) {
+        console.error('Error checking contract:', error);
+        res
+            .status(500)
+            .json({ success: false, message: 'Failed to check contract', error });
+        return;
+    }
+});
 exports.createRental = (0, express_async_handler_1.default)(async (req, res) => {
     try {
-        const { userID, moveTypeID, rentalSourceID, contractNumber, startDate, participats, monthsCount, isMonthly, endDate, unitID, } = req.body;
+        const user = req.user; // User from Passport authentication
+        const { moveTypeID, rentalSourceID, contractNumber, startDate, participats, monthsCount, isMonthly, endDate, unitID, } = req.body;
+        // Debug: log incoming parsed body to help trace cases where submitted numbers
+        // differ from stored values. Only log outside production.
+        try {
+            if (process.env.NODE_ENV !== 'production') {
+                // shallow clone to avoid logging large objects like files
+                // eslint-disable-next-line no-console
+                console.log('[createRental] incoming body:', JSON.stringify(req.body));
+            }
+        }
+        catch (err) {
+            // ignore logging errors
+        }
         const parsed = rentals_1.createRentalSchema.safeParse(req.body);
         if (!parsed.success) {
             res.status(400).json({
+                success: false,
                 message: 'Validation failed',
                 errors: parsed.error.flatten(),
+                code: 'VALIDATION_ERROR',
             });
             return;
         }
@@ -39,20 +121,24 @@ exports.createRental = (0, express_async_handler_1.default)(async (req, res) => 
         const hasEndDate = !!endDate;
         if (!isMonthlyMode && !hasEndDate) {
             res.status(400).json({
+                success: false,
                 message: 'You must set both isMonthly and monthsCount, or provide an endDate.',
+                code: 'INVALID_DATE_CONFIGURATION',
             });
             return;
         }
         const rentalStart = new Date(startDate);
-        let rentalEnd = endDate ? new Date(endDate) : null;
         rentalStart.setHours(0, 0, 0, 0);
-        rentalEnd?.setHours(0, 0, 0, 0);
+        // Normalize rentalEnd consistently
+        let rentalEnd = null;
         if (endDate) {
             rentalEnd = new Date(endDate);
+            rentalEnd.setHours(0, 0, 0, 0);
         }
         else if (isMonthly && monthsCount) {
             rentalEnd = new Date(rentalStart);
             rentalEnd.setMonth(rentalEnd.getMonth() + monthsCount);
+            rentalEnd.setHours(0, 0, 0, 0);
         }
         else {
             res.status(400).json({ message: 'Cannot determine rental end date.' });
@@ -64,12 +150,14 @@ exports.createRental = (0, express_async_handler_1.default)(async (req, res) => 
             });
             return;
         }
-        // Check for overlapping rentals for the same unit (rentalID)
+        // Check for overlapping rentals for the same unit.
+        // Use strict inequalities so that touching endpoints are allowed
+        // (e.g., new.endDate === existing.startDate is OK).
         const overlappingRental = await rentalModel_1.RentalModel.findOne({
             unitID,
             $and: [
-                { startDate: { $lte: rentalEnd } },
-                { endDate: { $gte: rentalStart } },
+                { startDate: { $lt: rentalEnd } },
+                { endDate: { $gt: rentalStart } },
             ],
         });
         if (overlappingRental) {
@@ -80,32 +168,57 @@ exports.createRental = (0, express_async_handler_1.default)(async (req, res) => 
             return;
         }
         const data = parsed.data; // Now fully typed and safe!
-        // Assuming you have a way to fetch the user by ID
-        const user = await userModel_1.default.findOne({
-            userID,
-        });
-        if (!user) {
-            res.status(404).json({ message: 'User not found' });
-            return;
+        // Normalize owner user id: prefer provided participats.owner.userID but fall back to authenticated user
+        const bodyOwnerUserId = (participats && participats.owner && participats.owner.userID) ||
+            undefined;
+        let ownerUserId = bodyOwnerUserId && String(bodyOwnerUserId).trim() !== ''
+            ? bodyOwnerUserId
+            : user && user._id
+                ? user._id
+                : undefined;
+        // If it's a valid hex string, cast to ObjectId for queries/creation
+        if (ownerUserId && mongoose_1.default.Types.ObjectId.isValid(ownerUserId)) {
+            ownerUserId = new mongoose_1.default.Types.ObjectId(String(ownerUserId));
         }
-        // Assuming you have a way to fetch the user by ID
+        // Ensure participats structure exists on the payload and set owner.userID
+        data.participats =
+            data.participats || { owner: {}, tentant: {} };
+        data.participats.owner = data.participats.owner || {};
+        data.participats.owner.userID = ownerUserId;
+        // Ensure top-level rental userID is set to authenticated user if missing
+        if (!data.userID && user && user._id) {
+            data.userID = user._id;
+        }
+        // Validate move type
         const moveType = await moveTypeModel_1.MoveTypeModel.findById(moveTypeID);
         if (!moveType) {
-            res.status(404).json({ message: 'moveType not found' });
+            res.status(404).json({
+                success: false,
+                message: 'Move type not found',
+                code: 'MOVE_TYPE_NOT_FOUND',
+            });
             return;
         }
+        // Validate rental source
         const RentalSource = await rentalSourceModel_1.RentalSourceModel.findById(rentalSourceID);
         if (!RentalSource) {
-            res.status(404).json({ message: 'RentalSource not found' });
+            res.status(404).json({
+                success: false,
+                message: 'Rental source not found',
+                code: 'RENTAL_SOURCE_NOT_FOUND',
+            });
             return;
         }
-        // Check if rental already exists
-        const existingRental = await rentalModel_1.RentalModel.findOne({
+        // Check if rental already exists - only include owner condition when we have a valid id
+        const existingFilter = {
             moveTypeID,
             unitID,
             startDate,
-            'participats.owner.userID': participats?.owner?.userID,
-        });
+        };
+        if (ownerUserId) {
+            existingFilter['participats.owner.userID'] = ownerUserId;
+        }
+        const existingRental = await rentalModel_1.RentalModel.findOne(existingFilter);
         if (existingRental) {
             res.status(400).json({
                 message: 'A rental with this configuration already exists',
@@ -117,22 +230,47 @@ exports.createRental = (0, express_async_handler_1.default)(async (req, res) => 
             res.status(400).json({ message: 'Failed to create rental ' });
             return;
         }
+        // Auto-update rental status and related unit status
+        try {
+            const { updateRentalStatus, updateUnitStatus } = await Promise.resolve().then(() => __importStar(require('../statusUpdateServices')));
+            await updateRentalStatus(newRental._id);
+            await updateUnitStatus(new mongoose_1.Types.ObjectId(newRental.unitID.toString()));
+        }
+        catch (statusError) {
+            console.warn('Warning: Could not update rental/unit status:', statusError);
+            // Don't fail the request if status update fails
+        }
+        // Build a safe performedBy object for history. req.user may be undefined
+        // (for example when middleware injects only userID into the body), so
+        // fall back to ownerUserId and avoid dereferencing nested properties.
+        const performedByUserId = (user && user._id) || ownerUserId;
+        const performedByName = (user && user.userName && user.userName.slug) ||
+            (user && user.email) ||
+            (performedByUserId ? String(performedByUserId) : 'unknown');
+        const performedByRole = (user && user.role) || 'user';
         await (0, recordHistory_1.recordHistory)({
             table: 'rental',
             documentId: newRental._id,
-            action: 'create', // or 'update' based on your logic
+            action: 'create',
             performedBy: {
-                userId: user._id,
-                name: user.userName.slug,
-                role: user.role,
+                userId: performedByUserId,
+                name: performedByName,
+                role: performedByRole,
             },
-            diff: newRental.toObject(), // Assuming you want to log the entire user object
-            reason: 'User create new rental', // optional
+            diff: newRental.toObject(),
+            reason: 'User create new rental',
         });
         res.status(201).json({
             message: 'rental created successfully',
             rental: newRental,
         });
+        // update stats for the user asynchronously
+        try {
+            void statsService_1.default.upsertStatsFor(String(user._id), { scope: 'all' });
+        }
+        catch (err) {
+            console.warn('Failed to upsert stats after rental create', err);
+        }
     }
     catch (error) {
         console.error('Error creating rental:', error);
@@ -141,18 +279,81 @@ exports.createRental = (0, express_async_handler_1.default)(async (req, res) => 
 });
 exports.getAllRentals = (0, express_async_handler_1.default)(async (req, res) => {
     try {
-        const rentals = await rentalModel_1.RentalModel.find();
-        res.json(rentals);
-        return;
+        const user = req.user;
+        const { filters, pagination, sort, populate, select } = req
+            .authenticatedQuery;
+        // Allow direct contractNumber query (e.g., ?contractNumber=REN-1234-...)
+        // This supports frontend uniqueness checks which call the list endpoint with this query param.
+        const contractNumberQuery = req.query.contractNumber;
+        if (contractNumberQuery) {
+            // ensure filters object exists and add exact-match filter
+            filters.contractNumber = String(contractNumberQuery);
+        }
+        // Build query with user isolation already applied by middleware
+        let query = rentalModel_1.RentalModel.find(filters);
+        // Apply sorting
+        query = query.sort(sort);
+        // Apply population
+        if (populate && populate.length > 0) {
+            populate.forEach((field) => {
+                query = query.populate(field);
+            });
+        }
+        // Apply field selection
+        if (select) {
+            query = query.select(select);
+        }
+        // Execute queries in parallel
+        const [rentals, totalCount] = await Promise.all([
+            query.skip(pagination.skip).limit(pagination.limit).exec(),
+            rentalModel_1.RentalModel.countDocuments(filters),
+        ]);
+        // Auto-update rental statuses in background (don't wait for completion)
+        if (rentals.length > 0) {
+            setTimeout(async () => {
+                try {
+                    const { updateRentalStatus } = await Promise.resolve().then(() => __importStar(require('../statusUpdateServices')));
+                    await Promise.all(rentals.map((rental) => updateRentalStatus(rental._id)));
+                }
+                catch (statusError) {
+                    console.warn('Warning: Could not update rentals status:', statusError);
+                }
+            }, 100); // Small delay to not block the response
+        }
+        // Calculate pagination metadata
+        const totalPages = Math.ceil(totalCount / pagination.limit);
+        const hasNextPage = pagination.page < totalPages;
+        const hasPrevPage = pagination.page > 1;
+        res.json({
+            success: true,
+            data: rentals,
+            pagination: {
+                page: pagination.page,
+                limit: pagination.limit,
+                totalCount,
+                totalPages,
+                hasNextPage,
+                hasPrevPage,
+            },
+            meta: {
+                requestedBy: user.userName?.slug || user.email,
+                timestamp: new Date().toISOString(),
+                filters: Object.keys(filters).length > 1 ? filters : undefined,
+            },
+        });
     }
     catch (error) {
-        console.error('Error fetching rental types:', error);
-        res.status(500).json({ message: 'Failed to fetch rental types', error });
-        return;
+        console.error('Error fetching rentals:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch rentals',
+            error: process.env.NODE_ENV === 'development' ? error : undefined,
+        });
     }
 });
 exports.getRentalByID = (0, express_async_handler_1.default)(async (req, res) => {
     try {
+        const user = req.user;
         const rentalId = req.params.id;
         if (!rentalId) {
             res.status(400).json({ message: 'Rental ID is required' });
@@ -162,19 +363,39 @@ exports.getRentalByID = (0, express_async_handler_1.default)(async (req, res) =>
             res.status(400).json({ message: 'Invalid rental ID format' });
             return;
         }
-        const rental = await rentalModel_1.RentalModel.findById(rentalId);
-        console.log('rental', rental);
+        // Find rental with user ownership check
+        const rental = await rentalModel_1.RentalModel.findOne({
+            _id: rentalId,
+            $or: [
+                { userID: user._id }, // Primary owner
+                { 'participats.owner.userID': user._id }, // Owner participant
+                { 'participats.tentant.userID': user._id }, // Tenant participant
+            ],
+        })
+            .populate('Unit', 'RentalSource', 'MoveType');
         if (!rental) {
-            res.status(404).json({ message: 'rental not found' });
+            res.status(404).json({
+                success: false,
+                message: 'Rental not found or access denied',
+            });
             return;
         }
-        res.json(rental);
-        return;
+        res.json({
+            success: true,
+            data: rental,
+            meta: {
+                requestedBy: user.userName?.slug || user.email,
+                timestamp: new Date().toISOString(),
+            },
+        });
     }
     catch (error) {
-        console.error('Error fetching rental types:', error);
-        res.status(500).json({ message: 'Failed to fetch rental types', error });
-        return;
+        console.error('Error fetching rental:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch rental',
+            error: process.env.NODE_ENV === 'development' ? error : undefined,
+        });
     }
 });
 exports.deleteRental = (0, express_async_handler_1.default)(async (req, res) => {
@@ -216,6 +437,18 @@ exports.deleteRental = (0, express_async_handler_1.default)(async (req, res) => 
             message: 'rental deleted successfully',
             rental: deletedrental,
         });
+        // update stats for the user asynchronously
+        try {
+            const ownerUserId = deletedrental.participats?.owner?.userID || undefined;
+            if (ownerUserId) {
+                void statsService_1.default.upsertStatsFor(String(ownerUserId), {
+                    scope: 'all',
+                });
+            }
+        }
+        catch (err) {
+            console.warn('Failed to upsert stats after rental delete', err);
+        }
         return;
     }
     catch (error) {
@@ -285,6 +518,13 @@ exports.updateRental = (0, express_async_handler_1.default)(async (req, res) => 
             message: 'rental updated successfully',
             rental,
         });
+        // update stats for the user asynchronously
+        try {
+            void statsService_1.default.upsertStatsFor(String(user._id), { scope: 'all' });
+        }
+        catch (err) {
+            console.warn('Failed to upsert stats after rental update', err);
+        }
         return;
     }
     catch (error) {

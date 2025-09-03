@@ -24,12 +24,20 @@ export const namerentalSource = asyncHandler(
 export const getRentalSources = asyncHandler(
   async (req: Request, res: Response) => {
     try {
-      const rentalSource = await RentalSourceModel.find();
-      res.json(rentalSource);
+  // If caller provided a user filter (some front-end calls include the user id),
+  // return only that user's rental sources. Otherwise return all.
+  const filter: any = {};
+  const user = (req.user as any) as Iuser | undefined;
+  const queryUserId = (req.query && (req.query.userID || req.query.userId)) as string | undefined;
+  if (queryUserId) filter.userId = queryUserId;
+  else if (user && user._id) filter.userId = (user._id as any);
+
+  const rentalSource = await RentalSourceModel.find(filter);
+  res.json({ success: true, data: rentalSource });
       return;
     } catch (error) {
       console.error('Error fetching unit types:', error);
-      res.status(500).json({ message: 'Failed to fetch unit types', error });
+  res.status(500).json({ message: 'Failed to fetch rental sources', error });
       return;
     }
   },
@@ -38,23 +46,25 @@ export const getRentalSources = asyncHandler(
 export const createRentalSource = asyncHandler(
   async (req: Request, res: Response) => {
     try {
-      const { userID, SourceName, description } = req.body;
-      // Assuming you have a way to fetch the user by ID
-      const user: Iuser | null = await UserModel.findOne({ userID });
+      const { SourceName, description } = req.body;
+      // Use authenticated user from Passport (req.user) per migration guide
+      const user = (req.user as any) as Iuser | undefined;
       if (!user) {
-        res.status(404).json({ message: 'User not found' });
+        res.status(401).json({ code: 'UNAUTHORIZED', message: 'User not authenticated' });
         return;
       }
 
       if (!SourceName) {
-        res.status(404).json({ message: 'SourceName not found' });
+        res.status(400).json({ message: 'SourceName is required' });
         return;
       }
+      // Ensure uniqueness per user
       const existingRentalSource = await RentalSourceModel.findOne({
         SourceName,
+        userId: user._id as any,
       });
       if (existingRentalSource) {
-        res.status(400).json({ message: 'Source Name already exists' });
+        res.status(409).json({ message: 'Rental source already exists for this user' });
         return;
       }
 
@@ -70,28 +80,55 @@ export const createRentalSource = asyncHandler(
       const newRentalSource = await RentalSourceModel.create({
         SourceName,
         description,
+        userId: user._id as any,
       });
       await recordHistory({
         table: 'RentalSource',
         documentId: newRentalSource._id as Types.ObjectId,
-        action: 'create', // or 'update' based on your logic
+        action: 'create',
         performedBy: {
           userId: user._id as Types.ObjectId,
-          name: user.userName.slug,
+          name: ((user.userName && (user.userName.slug || user.userName.displayName)) || user.contactInfo.email) as string,
           role: user.role,
         },
-        diff: newRentalSource.toObject(), // Assuming you want to log the entire user object
-        reason: 'User create new Move type', // optional
+        diff: newRentalSource.toObject(),
+        reason: 'User create new Rental source',
       });
       res.status(201).json({
-        message: 'Move type created successfully',
-        unitType: newRentalSource,
+        success: true,
+        message: 'Rental source created successfully',
+        data: newRentalSource,
       });
 
       return;
     } catch (error) {
       console.error('Error fetching emojis:', error);
-      res.status(500).json({ message: 'Failed to fetch emojis', error });
+      res.status(500).json({ message: 'Failed to create rental source', error });
+      return;
+    }
+  },
+);
+
+export const getRentalSourceById = asyncHandler(
+  async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id as string | undefined;
+      if (!id) {
+        res.status(400).json({ message: 'id parameter is required' });
+        return;
+      }
+
+      const rentalSource = await RentalSourceModel.findById(id);
+      if (!rentalSource) {
+        res.status(404).json({ success: false, message: 'Rental source not found' });
+        return;
+      }
+
+      res.json({ success: true, data: rentalSource });
+      return;
+    } catch (error) {
+      console.error('Error fetching rental source by id:', error);
+      res.status(500).json({ message: 'Failed to fetch rental source', error });
       return;
     }
   },

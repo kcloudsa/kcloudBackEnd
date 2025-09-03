@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.NotificationModel = void 0;
 const mongoose_1 = require("mongoose");
 const notificationSchema = new mongoose_1.Schema({
-    userID: { type: String, required: true },
+    userID: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true },
     type: {
         type: String,
         required: [true, 'type is required'],

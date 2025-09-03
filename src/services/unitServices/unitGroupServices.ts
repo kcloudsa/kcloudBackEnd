@@ -7,6 +7,7 @@ import { recordHistory } from '../../Utils/recordHistory';
 import UserModel from '../../models/userModel';
 import { getDeepDiff } from '../../Utils/deepDiff';
 import { deepMerge } from '../../Utils/deepMerge';
+import Iuser from '../../interfaces/Iuser';
 
 export const nameUnitGroup = expressAsyncHandler(
   async (req: Request, res: Response) => {
@@ -43,10 +44,11 @@ export const getAllUnitGroups = expressAsyncHandler(
 export const createUnitGroup = expressAsyncHandler(
   async (req: Request, res: Response) => {
     try {
-      const { userID, name, description, unitGroupStatus } = req.body;
-      // Validate required fields
-      if (!userID || !name) {
-        res.status(400).json({ message: 'User ID and name are required' });
+      const { name, description, unitGroupStatus } = req.body;
+      // Use authenticated user from Passport (req.user)
+      const user = (req.user as any) as Iuser | undefined;
+      if (!user || !name) {
+        res.status(400).json({ message: 'User and name are required' });
         return;
       }
       const parsed = createUintGroupsSchema.safeParse(req.body);
@@ -57,8 +59,9 @@ export const createUnitGroup = expressAsyncHandler(
         });
         return;
       }
-      const user = await UserModel.findOne({ userID });
-      if (!user) {
+  // ensure user exists in DB (optional)
+      const dbUser = await UserModel.findOne({ userID: user.userID }) || (user as any);
+      if (!dbUser) {
         res.status(404).json({ message: 'User not found' });
         return;
       }
@@ -90,9 +93,9 @@ export const createUnitGroup = expressAsyncHandler(
         documentId: savedGroup._id as Types.ObjectId,
         action: 'create', // or 'update' based on your logic
         performedBy: {
-          userId: user._id as Types.ObjectId,
-          name: user.userName.slug,
-          role: user.role,
+          userId: dbUser._id as Types.ObjectId,
+          name: (dbUser.userName && (dbUser.userName.slug || dbUser.userName.displayName)) || dbUser.name || dbUser.email,
+          role: dbUser.role,
         },
         diff: savedGroup.toObject(), // Assuming you want to log the entire user object
         reason: 'User create new unit type', // optional
@@ -131,8 +134,9 @@ export const getUnitGroupById = expressAsyncHandler(
 export const updateUnitGroup = expressAsyncHandler(
   async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
-      const { name, description, unitGroupStatus, userID } = req.body;
+  const { id } = req.params;
+  const { name, description, unitGroupStatus } = req.body;
+  const userID = req.body.userID || (req.user as any)?.userID || (req.user as any)?._id?.toString();
       if (!id) {
         res.status(400).json({ message: 'Unit group ID is required' });
         return;
@@ -145,9 +149,9 @@ export const updateUnitGroup = expressAsyncHandler(
 
         return;
       }
-      const user = await UserModel.findOne({ userID });
+  const user = (req.user as any) as Iuser | undefined;
       if (!user) {
-        res.status(404).json({ message: 'User not found' });
+        res.status(401).json({ code: 'UNAUTHORIZED', message: 'User not authenticated' });
         return;
       }
       const existingGroup = await UnitGroupModel.findById(id);
@@ -186,14 +190,15 @@ export const updateUnitGroup = expressAsyncHandler(
         return;
       }
 
+      const dbUser = await UserModel.findOne({ userID: user.userID }) || (user as any);
       await recordHistory({
         table: 'UnitGroups',
         documentId: updatedGroup._id as Types.ObjectId,
         action: 'update', // or 'create' based on your logic
         performedBy: {
-          userId: user._id as Types.ObjectId,
-          name: user.userName.slug,
-          role: user.role,
+          userId: dbUser._id as Types.ObjectId,
+          name: (dbUser.userName && (dbUser.userName.slug || dbUser.userName.displayName)) || dbUser.name || dbUser.email,
+          role: dbUser.role,
         },
         diff, // Assuming you want to log the entire user object
         reason: 'User updated unit group', // optional
@@ -220,9 +225,9 @@ export const deleteUnitGroup = expressAsyncHandler(
         res.status(404).json({ message: 'Unit group not found' });
         return;
       }
-      const user = await UserModel.findOne({ userID: deletedGroup.userID });
+  const user = await UserModel.findOne({ userID: deletedGroup.userID }) || (req.user as any);
       if (!user) {
-        res.status(404).json({ message: 'User not found' });
+        res.status(401).json({ code: 'UNAUTHORIZED', message: 'User not authenticated' });
         return;
       }
       await recordHistory({
@@ -231,7 +236,7 @@ export const deleteUnitGroup = expressAsyncHandler(
         action: 'delete',
         performedBy: {
           userId: user._id as Types.ObjectId,
-          name: user.userName.slug,
+          name: (user.userName && (user.userName.slug || user.userName.displayName)) || user.name || user.email,
           role: user.role,
         },
         diff: deletedGroup.toObject(),

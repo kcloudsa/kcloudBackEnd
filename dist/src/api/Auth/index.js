@@ -11,6 +11,7 @@ const passport_1 = __importDefault(require("passport"));
 const passport_local_1 = require("passport-local");
 const passport_google_oauth20_1 = require("passport-google-oauth20");
 const passport_jwt_1 = require("passport-jwt");
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const crypto_1 = __importDefault(require("crypto"));
 const userServices_1 = require("../../services/userServices");
 const userModel_1 = __importDefault(require("../../models/userModel"));
@@ -36,20 +37,48 @@ passport_1.default.use(new passport_local_1.Strategy({
             return done(null, false, { message: 'Invalid email or password' });
         }
         if (user && user.password?.hashed) {
-            // Plain text comparison for now (replace with bcrypt later)
             const storedPassword = user.password.hashed;
-            if (storedPassword === password) {
-                return done(null, {
-                    id: user.userID,
-                    email: user.contactInfo?.email?.email,
-                    name: user.userName?.displayName,
-                    role: user.role,
-                    profilePicture: user.userInfo?.profilePicture || null,
-                });
+            // First try bcrypt comparison (for properly hashed passwords)
+            try {
+                const isPasswordValid = await bcryptjs_1.default.compare(password, storedPassword);
+                if (isPasswordValid) {
+                    return done(null, {
+                        _id: user._id,
+                        id: user.userID,
+                        email: user.contactInfo?.email?.email,
+                        name: user.userName?.displayName,
+                        role: user.role,
+                        profilePicture: user.userInfo?.profilePicture || null,
+                    });
+                }
             }
-            else {
-                return done(null, false, { message: 'Invalid email or password' });
+            catch (bcryptError) {
+                console.log('bcrypt comparison failed, trying plain text for user:', email);
+                // If bcrypt fails, it might be a plain text password (legacy)
+                if (storedPassword === password) {
+                    console.log('Plain text password match found for user:', email, 'migrating to bcrypt...');
+                    // Migrate the password to bcrypt hash
+                    try {
+                        const saltRounds = 12;
+                        const hashedPassword = await bcryptjs_1.default.hash(password, saltRounds);
+                        await userModel_1.default.updateOne({ 'contactInfo.email.email': email }, { 'password.hashed': hashedPassword });
+                        console.log('Password migrated to bcrypt for user:', email);
+                    }
+                    catch (migrationError) {
+                        console.error('Failed to migrate password for user:', email, migrationError);
+                    }
+                    return done(null, {
+                        _id: user._id,
+                        id: user.userID,
+                        email: user.contactInfo?.email?.email,
+                        name: user.userName?.displayName,
+                        role: user.role,
+                        profilePicture: user.userInfo?.profilePicture || null,
+                    });
+                }
             }
+            console.log('Password comparison failed for user:', email);
+            return done(null, false, { message: 'Invalid email or password' });
         }
         return done(null, false, { message: 'Invalid email or password' });
     }
@@ -67,9 +96,16 @@ passport_1.default.use(new passport_jwt_1.Strategy({
         const user = await (0, userServices_1.getUserByEmail)(payload.email);
         if (user) {
             return done(null, {
+                _id: user._id,
                 id: user.userID,
                 email: user.contactInfo?.email?.email,
-                name: user.userName?.displayName,
+                // Proper name fields structure
+                firstName: user.userName?.firstName,
+                lastName: user.userName?.lastName,
+                displayName: user.userName?.displayName,
+                name: user.userName?.firstName && user.userName?.lastName
+                    ? `${user.userName.firstName} ${user.userName.lastName}`.trim()
+                    : user.userName?.displayName,
                 role: user.role,
                 profilePicture: user.userInfo?.profilePicture || null,
             });
@@ -99,6 +135,7 @@ if (googleClientId && googleClientSecret) {
                 let existingUser = await (0, userServices_1.getUserByEmail)(email);
                 if (existingUser) {
                     return done(null, {
+                        _id: existingUser._id,
                         id: existingUser.userID,
                         email: existingUser.contactInfo?.email?.email,
                         name: existingUser.userName?.displayName,
@@ -146,6 +183,7 @@ if (googleClientId && googleClientSecret) {
                 };
                 const newUser = await userModel_1.default.create(newUserData);
                 return done(null, {
+                    _id: newUser._id,
                     id: newUser.userID,
                     email: newUser.contactInfo?.email?.email,
                     name: newUser.userName?.displayName,
@@ -166,6 +204,36 @@ if (googleClientId && googleClientSecret) {
 }
 else {
 }
+// Passport serialization for session management
+passport_1.default.serializeUser((user, done) => {
+    // Store the user ID in the session
+    done(null, user.id);
+});
+passport_1.default.deserializeUser(async (id, done) => {
+    try {
+        // Find user by userID when deserializing from session
+        const user = await userModel_1.default.findOne({ userID: id });
+        if (user) {
+            const sessionUser = {
+                id: user.userID,
+                _id: user._id,
+                email: user.contactInfo?.email?.email,
+                name: user.userName?.displayName,
+                role: user.role,
+                profilePicture: user.userInfo?.profilePicture || null,
+                userName: user.userName
+            };
+            done(null, sessionUser);
+        }
+        else {
+            done(null, false);
+        }
+    }
+    catch (error) {
+        console.error('Error deserializing user:', error);
+        done(error, null);
+    }
+});
 // Middleware to authenticate JWT
 const authenticateJWT = (req, res, next) => {
     passport_1.default.authenticate('jwt', { session: false }, (err, user, info) => {
@@ -187,8 +255,6 @@ const authenticateJWT = (req, res, next) => {
         next();
     })(req, res, next);
 };
-// Initialize Passport
-router.use(passport_1.default.initialize());
 // POST /auth/register - Register new users
 router.post('/register', async (req, res) => {
     try {
@@ -240,6 +306,9 @@ router.post('/register', async (req, res) => {
                 error: 'VALIDATION_ERROR',
             });
         }
+        // Hash the password with bcrypt
+        const saltRounds = 12;
+        const hashedPassword = await bcryptjs_1.default.hash(passwordValue, saltRounds);
         // Check if email already exists
         const existingEmailUser = await userModel_1.default.findOne({
             'contactInfo.email.email': contactInfo.email.email,
@@ -284,7 +353,7 @@ router.post('/register', async (req, res) => {
                 },
             },
             password: {
-                hashed: passwordValue, // Use the extracted password value
+                hashed: hashedPassword, // Use the properly hashed password
                 expirationDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
             },
             userInfo: {
@@ -330,7 +399,8 @@ router.post('/register', async (req, res) => {
 });
 // POST /auth/login - Authenticate and issue tokens
 router.post('/login', (req, res, next) => {
-    passport_1.default.authenticate('local', { session: false }, async (err, user, info) => {
+    passport_1.default.authenticate('local', { session: true }, // Enable session for persistent login
+    async (err, user, info) => {
         if (err) {
             return res.status(500).json({
                 success: false,
@@ -346,36 +416,46 @@ router.post('/login', (req, res, next) => {
             });
         }
         try {
-            // Generate tokens
-            const accessToken = (0, tokenUtils_1.generateAccessToken)({
-                id: user.id,
-                email: user.email,
-                name: user.name,
-                role: user.role,
-            });
-            const refreshToken = (0, tokenUtils_1.generateRefreshToken)();
-            // Store refresh token in database
-            await (0, tokenUtils_1.storeRefreshToken)(user.id, refreshToken);
-            // Set refresh token as HTTP-only cookie
-            res.cookie('refreshToken', refreshToken, {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict',
-                maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-            });
-            return res.status(200).json({
-                success: true,
-                message: 'Login successful',
-                data: {
-                    user: {
-                        id: user.id,
-                        email: user.email,
-                        name: user.name,
-                        role: user.role,
+            // Log the user in (this will call serializeUser)
+            req.logIn(user, { session: true }, async (err) => {
+                if (err) {
+                    return res.status(500).json({
+                        success: false,
+                        message: 'Failed to log in user',
+                        error: 'LOGIN_ERROR'
+                    });
+                }
+                // Generate tokens
+                const accessToken = (0, tokenUtils_1.generateAccessToken)({
+                    id: user.id,
+                    email: user.email,
+                    name: user.name,
+                    role: user.role,
+                });
+                const refreshToken = (0, tokenUtils_1.generateRefreshToken)();
+                // Store refresh token in database
+                await (0, tokenUtils_1.storeRefreshToken)(user.id, refreshToken);
+                // Set refresh token as HTTP-only cookie
+                res.cookie('refreshToken', refreshToken, {
+                    httpOnly: true,
+                    secure: process.env.NODE_ENV === 'production',
+                    sameSite: 'strict',
+                    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+                });
+                return res.status(200).json({
+                    success: true,
+                    message: 'Login successful',
+                    data: {
+                        user: {
+                            id: user.id,
+                            email: user.email,
+                            name: user.name,
+                            role: user.role,
+                        },
+                        token: accessToken, // Frontend expects 'token'
+                        accessToken, // Keep both for compatibility
                     },
-                    token: accessToken, // Frontend expects 'token'
-                    accessToken, // Keep both for compatibility
-                },
+                });
             });
         }
         catch (error) {
@@ -454,6 +534,20 @@ router.post('/logout', async (req, res) => {
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
         });
+        // Destroy session if it exists
+        if (req.session) {
+            req.session.destroy((err) => {
+                if (err) {
+                    console.error('Session destruction error:', err);
+                }
+            });
+        }
+        // Logout from passport session
+        req.logout((err) => {
+            if (err) {
+                console.error('Passport logout error:', err);
+            }
+        });
         return res.status(200).json({
             success: true,
             message: 'Logout successful',
@@ -494,10 +588,11 @@ router.get('/google', (req, res, next) => {
     next();
 }, passport_1.default.authenticate('google', {
     scope: ['profile', 'email'],
-    session: false,
+    session: true, // Enable session for Google OAuth
 }));
 // GET /auth/google/callback - Handle Google OAuth callback
-router.get('/google/callback', passport_1.default.authenticate('google', { session: false }), async (req, res) => {
+router.get('/google/callback', passport_1.default.authenticate('google', { session: true }), // Enable session for callback
+async (req, res) => {
     try {
         const user = req.user;
         if (!user) {
@@ -507,35 +602,44 @@ router.get('/google/callback', passport_1.default.authenticate('google', { sessi
                 'http://localhost:3000';
             return res.redirect(`${returnUrl}/auth/error?message=no_user`);
         }
-        // Generate tokens
-        const accessToken = (0, tokenUtils_1.generateAccessToken)({
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: user.role,
+        // Log the user in to create a session
+        req.logIn(user, { session: true }, async (err) => {
+            if (err) {
+                console.error('Failed to log in user via Google OAuth:', err);
+                let returnUrl = req.session?.returnUrl || process.env.FRONTEND_URL || 'http://localhost:3000';
+                returnUrl = returnUrl.replace(/\/$/, '');
+                return res.redirect(`${returnUrl}/auth/error?message=login_error`);
+            }
+            // Generate tokens
+            const accessToken = (0, tokenUtils_1.generateAccessToken)({
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                role: user.role,
+            });
+            const refreshToken = (0, tokenUtils_1.generateRefreshToken)();
+            // Store refresh token
+            await (0, tokenUtils_1.storeRefreshToken)(user.id, refreshToken);
+            // Set refresh token as HTTP-only cookie
+            res.cookie('refreshToken', refreshToken, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+            });
+            // Get return URL and fix double slash issue
+            let returnUrl = req.session?.returnUrl ||
+                process.env.FRONTEND_URL ||
+                'http://localhost:3000';
+            // Remove trailing slash to prevent double slashes
+            returnUrl = returnUrl.replace(/\/$/, '');
+            // Clean up session
+            if (req.session) {
+                delete req.session.returnUrl;
+            }
+            // Redirect with access token
+            return res.redirect(`${returnUrl}/auth/callback?token=${accessToken}`);
         });
-        const refreshToken = (0, tokenUtils_1.generateRefreshToken)();
-        // Store refresh token
-        await (0, tokenUtils_1.storeRefreshToken)(user.id, refreshToken);
-        // Set refresh token as HTTP-only cookie
-        res.cookie('refreshToken', refreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-        });
-        // Get return URL and fix double slash issue
-        let returnUrl = req.session?.returnUrl ||
-            process.env.FRONTEND_URL ||
-            'http://localhost:3000';
-        // Remove trailing slash to prevent double slashes
-        returnUrl = returnUrl.replace(/\/$/, '');
-        // Clean up session
-        if (req.session) {
-            delete req.session.returnUrl;
-        }
-        // Redirect with access token
-        return res.redirect(`${returnUrl}/auth/callback?token=${accessToken}`);
     }
     catch (error) {
         console.error('Google callback error:', error);
@@ -544,6 +648,73 @@ router.get('/google/callback', passport_1.default.authenticate('google', { sessi
             'http://localhost:3000';
         returnUrl = returnUrl.replace(/\/$/, '');
         return res.redirect(`${returnUrl}/auth/error?message=callback_error`);
+    }
+}); // Debug route to check authentication status
+router.get('/debug/auth-status', (req, res) => {
+    res.json({
+        isAuthenticated: req.isAuthenticated ? req.isAuthenticated() : false,
+        hasUser: !!req.user,
+        user: req.user ? {
+            id: req.user.id,
+            email: req.user.email,
+            name: req.user.name,
+            role: req.user.role
+        } : null,
+        sessionID: req.sessionID,
+        hasSession: !!req.session,
+        cookies: req.cookies
+    });
+});
+// Utility endpoint to migrate plain text passwords to bcrypt (for development/migration)
+router.post('/migrate-passwords', async (req, res) => {
+    try {
+        // Add basic authentication check here if needed
+        const { adminSecret } = req.body;
+        if (adminSecret !== process.env.ADMIN_SECRET && adminSecret !== 'dev-migrate-123') {
+            return res.status(403).json({
+                success: false,
+                message: 'Unauthorized',
+            });
+        }
+        const users = await userModel_1.default.find({});
+        let migrated = 0;
+        let skipped = 0;
+        for (const user of users) {
+            if (user.password?.hashed) {
+                const storedPassword = user.password.hashed;
+                // Check if it's already a bcrypt hash (bcrypt hashes start with $2a$, $2b$, or $2y$)
+                if (storedPassword.startsWith('$2')) {
+                    skipped++;
+                    continue;
+                }
+                // Migrate plain text password to bcrypt
+                try {
+                    const saltRounds = 12;
+                    const hashedPassword = await bcryptjs_1.default.hash(storedPassword, saltRounds);
+                    await userModel_1.default.updateOne({ _id: user._id }, { 'password.hashed': hashedPassword });
+                    migrated++;
+                    console.log(`Migrated password for user: ${user.contactInfo?.email?.email}`);
+                }
+                catch (error) {
+                    console.error(`Failed to migrate password for user: ${user.contactInfo?.email?.email}`, error);
+                }
+            }
+        }
+        return res.json({
+            success: true,
+            message: 'Password migration completed',
+            migrated,
+            skipped,
+            total: users.length,
+        });
+    }
+    catch (error) {
+        console.error('Migration error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Migration failed',
+            error: error.message,
+        });
     }
 });
 // Error handling middleware

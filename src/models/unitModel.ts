@@ -17,8 +17,7 @@ export const unitSchema = new Schema<IUnit>(
   {
     uniteGroupID: {
       type: Schema.Types.ObjectId,
-      ref: 'UniteGroup',
-      required: true,
+      ref: 'UnitGroup',
     },
     userID: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     unitTypeID: {

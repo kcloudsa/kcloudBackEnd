@@ -3,7 +3,7 @@ import { Inotification } from '../interfaces/Inotification';
 
 const notificationSchema = new Schema<Inotification>(
   {
-    userID: { type: String, required: true },
+    userID: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     type: {
       type: String,
       required: [true, 'type is required'],

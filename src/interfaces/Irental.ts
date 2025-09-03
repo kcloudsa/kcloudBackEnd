@@ -7,7 +7,7 @@ interface IperiodicIncrease {
 }
 
 export interface IParticipant {
-  userID: string;
+  userID: Schema.Types.ObjectId;
   role: 'owner' | 'tentant';
 }
 
@@ -25,6 +25,7 @@ export interface IspecialPrice {
   price: number;
 }
 export interface Irental extends Document {
+  userID: Schema.Types.ObjectId; // Primary owner/creator of the rental
   unitID: Schema.Types.ObjectId; // Reference to the unit
   contractNumber: string; // Unique contract number
   moveTypeID: Schema.Types.ObjectId; // Reference to the move type
@@ -38,14 +39,29 @@ export interface Irental extends Document {
   isMonthly: boolean; // Indicates if the rental is monthly
   monthsCount: number; // Number of months for the rental
   roommates: number; // Number of roommates
-  status: 'active' | 'completed' | 'inactive' | 'cancelled'; // Status of the rental, e.g., 'active', 'completed', 'cancelled'
+  status:
+    | 'active'
+    | 'completed'
+    | 'cancelled'
+    | 'scheduled'
+    | 'confirmed'
+    | 'checked_in'
+    | 'terminated'
+    | 'inactive'
+    | 'pending'
+    | 'on_hold'; // Status of the rental, e.g., 'active', 'completed', 'cancelled'
   notes: string;
   rentalStatus:
     | 'active'
+    | 'completed'
+    | 'cancelled'
+    | 'scheduled'
+    | 'confirmed'
+    | 'checked_in'
     | 'terminated'
     | 'inactive'
-    | 'completed'
-    | 'cancelled';
+    | 'pending'
+    | 'on_hold';
   restMonthsLeft?: Number;
   periodicIncrease: IperiodicIncrease; // Periodic increase details
   participats: {

@@ -40,10 +40,11 @@ exports.getAllUnitGroups = (0, express_async_handler_1.default)(async (req, res)
 });
 exports.createUnitGroup = (0, express_async_handler_1.default)(async (req, res) => {
     try {
-        const { userID, name, description, unitGroupStatus } = req.body;
-        // Validate required fields
-        if (!userID || !name) {
-            res.status(400).json({ message: 'User ID and name are required' });
+        const { name, description, unitGroupStatus } = req.body;
+        // Use authenticated user from Passport (req.user)
+        const user = req.user;
+        if (!user || !name) {
+            res.status(400).json({ message: 'User and name are required' });
             return;
         }
         const parsed = unitGroups_1.createUintGroupsSchema.safeParse(req.body);
@@ -54,8 +55,9 @@ exports.createUnitGroup = (0, express_async_handler_1.default)(async (req, res) 
             });
             return;
         }
-        const user = await userModel_1.default.findOne({ userID });
-        if (!user) {
+        // ensure user exists in DB (optional)
+        const dbUser = await userModel_1.default.findOne({ userID: user.userID }) || user;
+        if (!dbUser) {
             res.status(404).json({ message: 'User not found' });
             return;
         }
@@ -85,9 +87,9 @@ exports.createUnitGroup = (0, express_async_handler_1.default)(async (req, res) 
             documentId: savedGroup._id,
             action: 'create', // or 'update' based on your logic
             performedBy: {
-                userId: user._id,
-                name: user.userName.slug,
-                role: user.role,
+                userId: dbUser._id,
+                name: (dbUser.userName && (dbUser.userName.slug || dbUser.userName.displayName)) || dbUser.name || dbUser.email,
+                role: dbUser.role,
             },
             diff: savedGroup.toObject(), // Assuming you want to log the entire user object
             reason: 'User create new unit type', // optional
@@ -123,7 +125,8 @@ exports.getUnitGroupById = (0, express_async_handler_1.default)(async (req, res)
 exports.updateUnitGroup = (0, express_async_handler_1.default)(async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, description, unitGroupStatus, userID } = req.body;
+        const { name, description, unitGroupStatus } = req.body;
+        const userID = req.body.userID || req.user?.userID || req.user?._id?.toString();
         if (!id) {
             res.status(400).json({ message: 'Unit group ID is required' });
             return;
@@ -134,9 +137,9 @@ exports.updateUnitGroup = (0, express_async_handler_1.default)(async (req, res) 
             });
             return;
         }
-        const user = await userModel_1.default.findOne({ userID });
+        const user = req.user;
         if (!user) {
-            res.status(404).json({ message: 'User not found' });
+            res.status(401).json({ code: 'UNAUTHORIZED', message: 'User not authenticated' });
             return;
         }
         const existingGroup = await unitGroupModel_1.UnitGroupModel.findById(id);
@@ -167,14 +170,15 @@ exports.updateUnitGroup = (0, express_async_handler_1.default)(async (req, res) 
             res.status(404).json({ message: 'Unit group not found' });
             return;
         }
+        const dbUser = await userModel_1.default.findOne({ userID: user.userID }) || user;
         await (0, recordHistory_1.recordHistory)({
             table: 'UnitGroups',
             documentId: updatedGroup._id,
             action: 'update', // or 'create' based on your logic
             performedBy: {
-                userId: user._id,
-                name: user.userName.slug,
-                role: user.role,
+                userId: dbUser._id,
+                name: (dbUser.userName && (dbUser.userName.slug || dbUser.userName.displayName)) || dbUser.name || dbUser.email,
+                role: dbUser.role,
             },
             diff, // Assuming you want to log the entire user object
             reason: 'User updated unit group', // optional
@@ -199,9 +203,9 @@ exports.deleteUnitGroup = (0, express_async_handler_1.default)(async (req, res) 
             res.status(404).json({ message: 'Unit group not found' });
             return;
         }
-        const user = await userModel_1.default.findOne({ userID: deletedGroup.userID });
+        const user = await userModel_1.default.findOne({ userID: deletedGroup.userID }) || req.user;
         if (!user) {
-            res.status(404).json({ message: 'User not found' });
+            res.status(401).json({ code: 'UNAUTHORIZED', message: 'User not authenticated' });
             return;
         }
         await (0, recordHistory_1.recordHistory)({
@@ -210,7 +214,7 @@ exports.deleteUnitGroup = (0, express_async_handler_1.default)(async (req, res) 
             action: 'delete',
             performedBy: {
                 userId: user._id,
-                name: user.userName.slug,
+                name: (user.userName && (user.userName.slug || user.userName.displayName)) || user.name || user.email,
                 role: user.role,
             },
             diff: deletedGroup.toObject(),

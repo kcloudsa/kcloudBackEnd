@@ -8,4 +8,5 @@ export interface ImaintenanceRequest extends Document {
   priority: string; // 'low' | 'medium' | 'high';
   resolvedAt?: Date; // Optional date when the request was resolved
   dueDate?: Date; // Optional due date for the maintenance request
+  credit: number;
 }

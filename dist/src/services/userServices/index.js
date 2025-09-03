@@ -150,6 +150,10 @@ exports.updateUser = (0, express_async_handler_1.default)(async (req, res) => {
     try {
         const userId = req.params.id;
         const updateData = req.body;
+        console.log("🔍 Backend received userId:", userId);
+        console.log("🔍 Backend received updateData:", updateData);
+        console.log("🔍 Backend req.body type:", typeof updateData);
+        console.log("🔍 Backend req.body keys:", Object.keys(updateData));
         const existingDoc = await userModel_1.default.findOne({ userID: userId });
         if (!existingDoc) {
             res.status(404).json({ message: 'User not found' });

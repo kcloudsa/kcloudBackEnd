@@ -50,6 +50,7 @@ function calculateDerivedFields(doc: any) {
 
 const rentalSchema = new Schema<Irental>(
   {
+    userID: { type: Schema.Types.ObjectId, ref: 'User', required: true }, // Primary owner of the rental
     unitID: { type: Schema.Types.ObjectId, required: true, ref: 'Unit' },
     contractNumber: { type: String, required: true },
     moveTypeID: {
@@ -61,12 +62,11 @@ const rentalSchema = new Schema<Irental>(
     endDate: { type: Date },
     rentalSourceID: {
       type: Schema.Types.ObjectId,
-      required: true,
       ref: 'RentalSource',
     },
-    startPrice: { type: Number, required: true, min: 0 },
+    startPrice: { type: Number, min: 0 },
     currentPrice: { type: Number, min: 0 },
-    securityDeposit: { type: Number, required: true, min: 0 },
+    securityDeposit: { type: Number, min: 0 },
     rentalAmount: { type: Number, required: true, min: 0 },
     isMonthly: { type: Boolean, default: false },
     monthsCount: { type: Number, default: 0, min: 0 },
@@ -82,7 +82,6 @@ const rentalSchema = new Schema<Irental>(
         type: {
           type: String,
           enum: ['weekly', 'once', 'monthly'],
-          required: true,
         },
         // For `weekly` type
         dayOfWeek: {
@@ -102,12 +101,12 @@ const rentalSchema = new Schema<Irental>(
         date: Date,
 
         // Special price
-        price: { type: Number, required: true, min: 0 },
+        price: { type: Number, min: 0 },
       },
     ],
     participats: {
       owner: {
-        userID: { type: String },
+        userID: { type: Schema.Types.ObjectId, ref: 'User' },
         role: { type: String, enum: ['owner'], default: 'owner' },
       },
       tentant: {
@@ -117,7 +116,19 @@ const rentalSchema = new Schema<Irental>(
     },
     rentalStatus: {
       type: String,
-      enum: ['active', 'terminated', 'inactive', 'completed', 'cancelled'],
+      required: true,
+      enum: [
+        'active',
+        'completed',
+        'cancelled',
+        'scheduled',
+        'confirmed',
+        'checked_in',
+        'terminated',
+        'inactive',
+        'pending',
+        'on_hold',
+      ],
     },
     restMonthsLeft: { type: Number },
   },
@@ -139,39 +150,45 @@ rentalSchema.pre('save', function (next) {
   } else {
     this.endDate;
   }
-  if (
-    this.startPrice &&
-    this.periodicIncrease != null &&
-    this.periodicIncrease?.isPercentage
-  ) {
+  // Only compute rentalAmount when it wasn't explicitly provided in the payload.
+  // This preserves a client-supplied rentalAmount (e.g., computed by frontend)
+  // while still computing sensible defaults when it's missing.
+  if (this.rentalAmount === undefined || this.rentalAmount === null) {
     if (
       this.startPrice &&
       this.periodicIncrease != null &&
-      this.periodicIncrease?.increaseValue
+      this.periodicIncrease?.isPercentage
     ) {
-      this.rentalAmount = calculateTotalRentInPercentage(
-        this.startPrice,
-        this.periodicIncrease?.increaseValue,
-        this.periodicIncrease?.periodicDuration,
-      );
+      if (
+        this.startPrice &&
+        this.periodicIncrease != null &&
+        this.periodicIncrease?.increaseValue
+      ) {
+        this.rentalAmount = calculateTotalRentInPercentage(
+          this.startPrice,
+          this.periodicIncrease?.increaseValue,
+          this.periodicIncrease?.periodicDuration,
+        );
+      } else {
+        this.rentalAmount = this.startPrice;
+      }
     } else {
-      this.rentalAmount = this.startPrice;
-    }
-  } else {
-    if (
-      this.startPrice &&
-      this.periodicIncrease != null &&
-      this.periodicIncrease.increaseValue
-    ) {
-      this.rentalAmount = calcFixedIncreaseRent(
-        this.startPrice,
-        this.periodicIncrease.increaseValue,
-        this.periodicIncrease.periodicDuration,
-      );
-    } else {
-      this.rentalAmount = this.startPrice;
+      if (
+        this.startPrice &&
+        this.periodicIncrease != null &&
+        this.periodicIncrease.increaseValue
+      ) {
+        this.rentalAmount = calcFixedIncreaseRent(
+          this.startPrice,
+          this.periodicIncrease.increaseValue,
+          this.periodicIncrease.periodicDuration,
+        );
+      } else {
+        this.rentalAmount = this.startPrice;
+      }
     }
   }
+  
   next();
 });
 rentalSchema.post('find', function (docs) {
@@ -187,6 +204,18 @@ rentalSchema.post('findOne', function (doc) {
 
 rentalSchema.post('findOneAndUpdate', function (doc) {
   calculateDerivedFields(doc);
+  
+  // Auto-update unit status when rental is updated
+  if (doc && doc.unitID) {
+    setTimeout(async () => {
+      try {
+        const { updateUnitStatus } = await import('../services/statusUpdateServices');
+        await updateUnitStatus(doc.unitID);
+      } catch (error) {
+        console.warn('Warning: Could not update unit status after rental update:', error);
+      }
+    }, 100);
+  }
 });
 
 export const RentalModel = model<Irental>('Rental', rentalSchema);

@@ -24,19 +24,80 @@ export const nameNotification = asyncHandler(
 export const getNotification = asyncHandler(
   async (req: Request, res: Response) => {
     try {
-      const Notification = await NotificationModel.find();
-      if (!Notification || Notification.length === 0) {
-        // Check if Notification is empty
-        res
-          .status(404)
-          .json({ message: 'No Notification found', Notification });
+      const user = req.user as any;
+      const { filters, pagination, sort, populate, select } = (req as any)
+        .authenticatedQuery;
+
+      // Build query with user isolation already applied by middleware
+      let query = NotificationModel.find(filters);
+
+      // Apply sorting
+      query = query.sort(sort);
+
+      // Apply population
+      if (populate && populate.length > 0) {
+        populate.forEach((field: string) => {
+          query = query.populate(field);
+        });
+      }
+
+      // Apply field selection
+      if (select) {
+        query = query.select(select);
+      }
+
+      // Execute queries in parallel
+      const [notifications, totalCount] = await Promise.all([
+        query.skip(pagination.skip).limit(pagination.limit).exec(),
+        NotificationModel.countDocuments(filters),
+      ]);
+
+      if (!notifications || notifications.length === 0) {
+        res.json({
+          success: true,
+          data: [],
+          message: 'No notifications found',
+          pagination: {
+            page: pagination.page,
+            limit: pagination.limit,
+            totalCount: 0,
+            totalPages: 0,
+            hasNextPage: false,
+            hasPrevPage: false,
+          },
+        });
         return;
       }
-      res.json(Notification);
+
+      // Calculate pagination metadata
+      const totalPages = Math.ceil(totalCount / pagination.limit);
+      const hasNextPage = pagination.page < totalPages;
+      const hasPrevPage = pagination.page > 1;
+
+      res.json({
+        success: true,
+        data: notifications,
+        pagination: {
+          page: pagination.page,
+          limit: pagination.limit,
+          totalCount,
+          totalPages,
+          hasNextPage,
+          hasPrevPage,
+        },
+        meta: {
+          requestedBy: user.userName?.slug || user.email,
+          timestamp: new Date().toISOString(),
+          filters: Object.keys(filters).length > 1 ? filters : undefined,
+        },
+      });
     } catch (error) {
-      console.error('Error fetching Notification:', error);
-      res.status(500).json({ message: 'Failed to fetch Notification', error });
-      return;
+      console.error('Error fetching notifications:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch notifications',
+        error: process.env.NODE_ENV === 'development' ? error : undefined,
+      });
     }
   },
 );
@@ -44,44 +105,41 @@ export const getNotification = asyncHandler(
 export const createNotification = asyncHandler(
   async (req: Request, res: Response) => {
     try {
-      const { userID, type, title, message } = req.body;
+      const user = req.user as any;
+      const { type, title, message } = req.body;
 
-      // Validate presence of userID
-      if (!userID) {
-        res.status(400).json({ message: 'User ID is required' });
-        return;
-      }
-
-      // Find user by userID
-      const user: Iuser | null = await UserModel.findOne({ userID });
-      if (!user) {
-        res.status(404).json({ message: 'User not found' });
-        return;
-      }
-
-      // Validate other fields before proceeding
+      // userID is automatically injected by middleware, but validate other fields
       if (!type || !title || !message) {
-        res
-          .status(400)
-          .json({ message: 'Type, title, and message are required' });
+        res.status(400).json({
+          success: false,
+          message: 'Type, title, and message are required',
+        });
         return;
       }
 
       // Check for existing notification (duplicate prevention)
       const existingNotification = await NotificationModel.findOne({
-        userID,
+        userID: user._id,
         type,
         title,
         message,
+        createdAt: {
+          $gte: new Date(Date.now() - 5 * 60 * 1000), // Within last 5 minutes
+        },
       });
+
       if (existingNotification) {
-        res.status(400).json({ message: 'Notification already exists' });
+        res.status(409).json({
+          success: false,
+          message:
+            'Duplicate notification - similar notification created recently',
+        });
         return;
       }
 
       // Zod validation
       const parsed = createNotificationSchema.safeParse({
-        userID, // Pass correct userId for schema
+        userID: user._id.toString(),
         type,
         title,
         message,
@@ -89,14 +147,20 @@ export const createNotification = asyncHandler(
 
       if (!parsed.success) {
         res.status(400).json({
+          success: false,
           message: 'Validation failed',
           errors: parsed.error.flatten(),
         });
         return;
       }
 
-      // Create new notification
-      const newNotification = await NotificationModel.create(parsed.data);
+      // Create new notification with user ID as ObjectId
+      const newNotification = await NotificationModel.create({
+        userID: user._id, // Use ObjectId directly
+        type,
+        title,
+        message,
+      });
 
       // Record history
       await recordHistory({
@@ -105,26 +169,31 @@ export const createNotification = asyncHandler(
         action: 'create',
         performedBy: {
           userId: user._id as Types.ObjectId,
-          name: user.userName.slug,
+          name: user.userName?.slug || user.email,
           role: user.role,
         },
         diff: newNotification.toObject(),
-        reason: 'User create new Notification',
+        reason: 'User create new notification',
       });
 
       // Send response
       res.status(201).json({
+        success: true,
         message: 'New notification created successfully',
-        Notification: newNotification,
+        data: newNotification,
+        meta: {
+          createdBy: user.userName?.slug || user.email,
+          timestamp: new Date().toISOString(),
+        },
       });
-      return;
     } catch (error) {
-      console.error('Error creating newNotification:', error);
-      res
-        .status(500)
-        .json({ message: 'Failed to create newNotification', error });
+      console.error('Error creating notification:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to create notification',
+        error: process.env.NODE_ENV === 'development' ? error : undefined,
+      });
     }
-    return;
   },
 );
 

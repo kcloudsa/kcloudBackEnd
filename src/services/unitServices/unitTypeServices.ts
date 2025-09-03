@@ -25,11 +25,10 @@ export const nameUnitType = expressAsyncHandler(
 export const createUnitType = expressAsyncHandler(
   async (req: Request, res: Response) => {
     try {
-      const userId = req.body.userID;
-      // Assuming you have a way to fetch the user by ID
-      const user: Iuser | null = await UserModel.findOne({ userID: userId });
+      // Use authenticated user from Passport (req.user)
+      const user = (req.user as any) as Iuser | undefined;
       if (!user) {
-        res.status(404).json({ message: 'User not found' });
+        res.status(401).json({ code: 'UNAUTHORIZED', message: 'User not authenticated' });
         return;
       }
 
@@ -57,6 +56,8 @@ export const createUnitType = expressAsyncHandler(
       }
       const newUnitType = await UnitTypeModel.create({
         type: type,
+        // model expects `userId` (camelCase) — ensure we populate the correct field
+        userId: user._id as Types.ObjectId,
       });
       await recordHistory({
         table: 'UnitType',
@@ -150,11 +151,10 @@ export const updateUnitType = expressAsyncHandler(
         return;
       }
 
-      // Record the history before updating
-      const userId = req.body.userID;
-      const user: Iuser | null = await UserModel.findOne({ userID: userId });
+      // Use authenticated user from Passport (req.user)
+      const user = (req.user as any) as Iuser | undefined;
       if (!user) {
-        res.status(404).json({ message: 'User not found' });
+        res.status(401).json({ code: 'UNAUTHORIZED', message: 'User not authenticated' });
         return;
       }
 
@@ -184,7 +184,7 @@ export const updateUnitType = expressAsyncHandler(
         action: 'update',
         performedBy: {
           userId: user._id as Types.ObjectId,
-          name: user.userName.slug,
+          name: ((user.userName && (user.userName.slug || user.userName.displayName)) || user.contactInfo.email) as string,
           role: user.role,
         },
         diff, // Assuming you want to log the changes
@@ -210,10 +210,10 @@ export const deleteUnitType = expressAsyncHandler(
         res.status(404).json({ message: 'Unit type not found' });
         return;
       }
-      const userId = req.body.userID;
-      const user: Iuser | null = await UserModel.findOne({ userID: userId });
+      // Use authenticated user from Passport (req.user)
+      const user = (req.user as any) as Iuser | undefined;
       if (!user) {
-        res.status(404).json({ message: 'User not found' });
+        res.status(401).json({ code: 'UNAUTHORIZED', message: 'User not authenticated' });
         return;
       }
       await UnitTypeModel.findByIdAndDelete(unitTypeId);
@@ -224,7 +224,7 @@ export const deleteUnitType = expressAsyncHandler(
         action: 'delete',
         performedBy: {
           userId: user._id as Types.ObjectId,
-          name: user.userName.slug,
+          name: ((user.userName && (user.userName.slug || user.userName.displayName)) || user.contactInfo.email) as string,
           role: user.role,
         },
         diff: existingUnitType.toObject(), // Assuming you want to log the deleted unit type

@@ -54,20 +54,54 @@ passport.use(
         }
 
         if (user && user.password?.hashed) {
-          // Plain text comparison for now (replace with bcrypt later)
           const storedPassword = user.password.hashed as string;
 
-          if (storedPassword === password) {
-            return done(null, {
-              id: user.userID,
-              email: user.contactInfo?.email?.email,
-              name: user.userName?.displayName,
-              role: user.role,
-              profilePicture: user.userInfo?.profilePicture || null,
-            });
-          } else {
-            return done(null, false, { message: 'Invalid email or password' });
+          // First try bcrypt comparison (for properly hashed passwords)
+          try {
+            const isPasswordValid = await bcrypt.compare(password, storedPassword);
+            
+            if (isPasswordValid) {
+              return done(null, {
+                _id: user._id,
+                id: user.userID,
+                email: user.contactInfo?.email?.email,
+                name: user.userName?.displayName,
+                role: user.role,
+                profilePicture: user.userInfo?.profilePicture || null,
+              });
+            }
+          } catch (bcryptError) {
+            console.log('bcrypt comparison failed, trying plain text for user:', email);
+            // If bcrypt fails, it might be a plain text password (legacy)
+            if (storedPassword === password) {
+              console.log('Plain text password match found for user:', email, 'migrating to bcrypt...');
+              
+              // Migrate the password to bcrypt hash
+              try {
+                const saltRounds = 12;
+                const hashedPassword = await bcrypt.hash(password, saltRounds);
+                await UserModel.updateOne(
+                  { 'contactInfo.email.email': email },
+                  { 'password.hashed': hashedPassword }
+                );
+                console.log('Password migrated to bcrypt for user:', email);
+              } catch (migrationError) {
+                console.error('Failed to migrate password for user:', email, migrationError);
+              }
+
+              return done(null, {
+                _id: user._id,
+                id: user.userID,
+                email: user.contactInfo?.email?.email,
+                name: user.userName?.displayName,
+                role: user.role,
+                profilePicture: user.userInfo?.profilePicture || null,
+              });
+            }
           }
+
+          console.log('Password comparison failed for user:', email);
+          return done(null, false, { message: 'Invalid email or password' });
         }
 
         return done(null, false, { message: 'Invalid email or password' });
@@ -91,9 +125,16 @@ passport.use(
         const user = await getUserByEmail(payload.email);
         if (user) {
           return done(null, {
+            _id: user._id,
             id: user.userID,
             email: user.contactInfo?.email?.email,
-            name: user.userName?.displayName,
+            // Proper name fields structure
+            firstName: user.userName?.firstName,
+            lastName: user.userName?.lastName,
+            displayName: user.userName?.displayName,
+            name: user.userName?.firstName && user.userName?.lastName 
+              ? `${user.userName.firstName} ${user.userName.lastName}`.trim()
+              : user.userName?.displayName,
             role: user.role,
             profilePicture: user.userInfo?.profilePicture || null,
           });
@@ -132,6 +173,7 @@ if (googleClientId && googleClientSecret) {
 
             if (existingUser) {
               return done(null, {
+                _id: existingUser._id,
                 id: existingUser.userID,
                 email: existingUser.contactInfo?.email?.email,
                 name: existingUser.userName?.displayName,
@@ -185,6 +227,7 @@ if (googleClientId && googleClientSecret) {
 
             const newUser = await UserModel.create(newUserData);
             return done(null, {
+              _id: newUser._id,
               id: newUser.userID,
               email: newUser.contactInfo?.email?.email,
               name: newUser.userName?.displayName,
@@ -204,6 +247,36 @@ if (googleClientId && googleClientSecret) {
   }
 } else {
 }
+
+// Passport serialization for session management
+passport.serializeUser((user: any, done) => {
+  // Store the user ID in the session
+  done(null, user.id);
+});
+
+passport.deserializeUser(async (id: string, done) => {
+  try {
+    // Find user by userID when deserializing from session
+    const user = await UserModel.findOne({ userID: id });
+    if (user) {
+      const sessionUser = {
+        id: user.userID,
+        _id: user._id,
+        email: user.contactInfo?.email?.email,
+        name: user.userName?.displayName,
+        role: user.role,
+        profilePicture: user.userInfo?.profilePicture || null,
+        userName: user.userName
+      };
+      done(null, sessionUser);
+    } else {
+      done(null, false);
+    }
+  } catch (error) {
+    console.error('Error deserializing user:', error);
+    done(error, null);
+  }
+});
 
 // Middleware to authenticate JWT
 const authenticateJWT = (req: Request, res: Response, next: NextFunction) => {
@@ -232,9 +305,6 @@ const authenticateJWT = (req: Request, res: Response, next: NextFunction) => {
     },
   )(req, res, next);
 };
-
-// Initialize Passport
-router.use(passport.initialize());
 
 // POST /auth/register - Register new users
 router.post('/register', async (req: Request, res: Response) => {
@@ -290,6 +360,10 @@ router.post('/register', async (req: Request, res: Response) => {
       });
     }
 
+    // Hash the password with bcrypt
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(passwordValue, saltRounds);
+
     // Check if email already exists
     const existingEmailUser = await UserModel.findOne({
       'contactInfo.email.email': contactInfo.email.email,
@@ -336,7 +410,7 @@ router.post('/register', async (req: Request, res: Response) => {
         },
       },
       password: {
-        hashed: passwordValue, // Use the extracted password value
+        hashed: hashedPassword, // Use the properly hashed password
         expirationDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
       },
       userInfo: {
@@ -385,7 +459,7 @@ router.post('/register', async (req: Request, res: Response) => {
 router.post('/login', (req: Request, res: Response, next: NextFunction) => {
   passport.authenticate(
     'local',
-    { session: false },
+    { session: true }, // Enable session for persistent login
     async (err: any, user: any, info: any) => {
       if (err) {
         return res.status(500).json({
@@ -404,23 +478,33 @@ router.post('/login', (req: Request, res: Response, next: NextFunction) => {
       }
 
       try {
-        // Generate tokens
-        const accessToken = generateAccessToken({
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-        });
+        // Log the user in (this will call serializeUser)
+        req.logIn(user, { session: true }, async (err) => {
+          if (err) {
+            return res.status(500).json({
+              success: false,
+              message: 'Failed to log in user',
+              error: 'LOGIN_ERROR'
+            });
+          }
 
-        const refreshToken = generateRefreshToken();
+          // Generate tokens
+          const accessToken = generateAccessToken({
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+          });
 
-        // Store refresh token in database
-        await storeRefreshToken(user.id, refreshToken);
+          const refreshToken = generateRefreshToken();
 
-        // Set refresh token as HTTP-only cookie
-        res.cookie('refreshToken', refreshToken, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
+          // Store refresh token in database
+          await storeRefreshToken(user.id, refreshToken);
+
+          // Set refresh token as HTTP-only cookie
+          res.cookie('refreshToken', refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
           sameSite: 'strict',
           maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         });
@@ -438,6 +522,7 @@ router.post('/login', (req: Request, res: Response, next: NextFunction) => {
             token: accessToken, // Frontend expects 'token'
             accessToken, // Keep both for compatibility
           },
+        });
         });
       } catch (error) {
         console.error('Token generation error:', error);
@@ -527,6 +612,22 @@ router.post('/logout', async (req: Request, res: Response) => {
       sameSite: 'strict',
     });
 
+    // Destroy session if it exists
+    if (req.session) {
+      req.session.destroy((err) => {
+        if (err) {
+          console.error('Session destruction error:', err);
+        }
+      });
+    }
+
+    // Logout from passport session
+    req.logout((err) => {
+      if (err) {
+        console.error('Passport logout error:', err);
+      }
+    });
+
     return res.status(200).json({
       success: true,
       message: 'Logout successful',
@@ -573,14 +674,14 @@ router.get(
   },
   passport.authenticate('google', {
     scope: ['profile', 'email'],
-    session: false,
+    session: true, // Enable session for Google OAuth
   }),
 );
 
 // GET /auth/google/callback - Handle Google OAuth callback
 router.get(
   '/google/callback',
-  passport.authenticate('google', { session: false }),
+  passport.authenticate('google', { session: true }), // Enable session for callback
   async (req: Request, res: Response) => {
     try {
       const user = req.user as any;
@@ -594,43 +695,53 @@ router.get(
         return res.redirect(`${returnUrl}/auth/error?message=no_user`);
       }
 
-      // Generate tokens
-      const accessToken = generateAccessToken({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
+      // Log the user in to create a session
+      req.logIn(user, { session: true }, async (err) => {
+        if (err) {
+          console.error('Failed to log in user via Google OAuth:', err);
+          let returnUrl = (req.session as any)?.returnUrl || process.env.FRONTEND_URL || 'http://localhost:3000';
+          returnUrl = returnUrl.replace(/\/$/, '');
+          return res.redirect(`${returnUrl}/auth/error?message=login_error`);
+        }
+
+        // Generate tokens
+        const accessToken = generateAccessToken({
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        });
+
+        const refreshToken = generateRefreshToken();
+
+        // Store refresh token
+        await storeRefreshToken(user.id, refreshToken);
+
+        // Set refresh token as HTTP-only cookie
+        res.cookie('refreshToken', refreshToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'strict',
+          maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        });
+
+        // Get return URL and fix double slash issue
+        let returnUrl =
+          (req.session as any)?.returnUrl ||
+          process.env.FRONTEND_URL ||
+          'http://localhost:3000';
+
+        // Remove trailing slash to prevent double slashes
+        returnUrl = returnUrl.replace(/\/$/, '');
+
+        // Clean up session
+        if (req.session) {
+          delete (req.session as any).returnUrl;
+        }
+
+        // Redirect with access token
+        return res.redirect(`${returnUrl}/auth/callback?token=${accessToken}`);
       });
-
-      const refreshToken = generateRefreshToken();
-
-      // Store refresh token
-      await storeRefreshToken(user.id, refreshToken);
-
-      // Set refresh token as HTTP-only cookie
-      res.cookie('refreshToken', refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      });
-
-      // Get return URL and fix double slash issue
-      let returnUrl =
-        (req.session as any)?.returnUrl ||
-        process.env.FRONTEND_URL ||
-        'http://localhost:3000';
-
-      // Remove trailing slash to prevent double slashes
-      returnUrl = returnUrl.replace(/\/$/, '');
-
-      // Clean up session
-      if (req.session) {
-        delete (req.session as any).returnUrl;
-      }
-
-      // Redirect with access token
-      return res.redirect(`${returnUrl}/auth/callback?token=${accessToken}`);
     } catch (error) {
       console.error('Google callback error:', error);
       let returnUrl =
@@ -641,7 +752,85 @@ router.get(
       return res.redirect(`${returnUrl}/auth/error?message=callback_error`);
     }
   },
-);
+);// Debug route to check authentication status
+router.get('/debug/auth-status', (req: Request, res: Response) => {
+  res.json({
+    isAuthenticated: req.isAuthenticated ? req.isAuthenticated() : false,
+    hasUser: !!req.user,
+    user: req.user ? {
+      id: (req.user as any).id,
+      email: (req.user as any).email,
+      name: (req.user as any).name,
+      role: (req.user as any).role
+    } : null,
+    sessionID: req.sessionID,
+    hasSession: !!req.session,
+    cookies: req.cookies
+  });
+});
+
+// Utility endpoint to migrate plain text passwords to bcrypt (for development/migration)
+router.post('/migrate-passwords', async (req: Request, res: Response) => {
+  try {
+    // Add basic authentication check here if needed
+    const { adminSecret } = req.body;
+    
+    if (adminSecret !== process.env.ADMIN_SECRET && adminSecret !== 'dev-migrate-123') {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized',
+      });
+    }
+
+    const users = await UserModel.find({});
+    let migrated = 0;
+    let skipped = 0;
+
+    for (const user of users) {
+      if (user.password?.hashed) {
+        const storedPassword = user.password.hashed as string;
+        
+        // Check if it's already a bcrypt hash (bcrypt hashes start with $2a$, $2b$, or $2y$)
+        if (storedPassword.startsWith('$2')) {
+          skipped++;
+          continue;
+        }
+
+        // Migrate plain text password to bcrypt
+        try {
+          const saltRounds = 12;
+          const hashedPassword = await bcrypt.hash(storedPassword, saltRounds);
+          
+          await UserModel.updateOne(
+            { _id: user._id },
+            { 'password.hashed': hashedPassword }
+          );
+          
+          migrated++;
+          console.log(`Migrated password for user: ${user.contactInfo?.email?.email}`);
+        } catch (error) {
+          console.error(`Failed to migrate password for user: ${user.contactInfo?.email?.email}`, error);
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: 'Password migration completed',
+      migrated,
+      skipped,
+      total: users.length,
+    });
+
+  } catch (error: any) {
+    console.error('Migration error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Migration failed',
+      error: error.message,
+    });
+  }
+});
 
 // Error handling middleware
 const authErrorHandler = (

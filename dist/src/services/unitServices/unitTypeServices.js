@@ -7,7 +7,6 @@ exports.deleteUnitType = exports.updateUnitType = exports.getUnitTypeById = expo
 const express_async_handler_1 = __importDefault(require("express-async-handler"));
 const unitTypeModel_1 = require("../../models/unitTypeModel");
 const recordHistory_1 = require("../../Utils/recordHistory");
-const userModel_1 = __importDefault(require("../../models/userModel"));
 const unitTypies_1 = require("../../validation/unitTypies");
 exports.nameUnitType = (0, express_async_handler_1.default)(async (req, res) => {
     try {
@@ -23,11 +22,10 @@ exports.nameUnitType = (0, express_async_handler_1.default)(async (req, res) => 
 });
 exports.createUnitType = (0, express_async_handler_1.default)(async (req, res) => {
     try {
-        const userId = req.body.userID;
-        // Assuming you have a way to fetch the user by ID
-        const user = await userModel_1.default.findOne({ userID: userId });
+        // Use authenticated user from Passport (req.user)
+        const user = req.user;
         if (!user) {
-            res.status(404).json({ message: 'User not found' });
+            res.status(401).json({ code: 'UNAUTHORIZED', message: 'User not authenticated' });
             return;
         }
         const type = req.body.type;
@@ -52,6 +50,8 @@ exports.createUnitType = (0, express_async_handler_1.default)(async (req, res) =
         }
         const newUnitType = await unitTypeModel_1.UnitTypeModel.create({
             type: type,
+            // model expects `userId` (camelCase) — ensure we populate the correct field
+            userId: user._id,
         });
         await (0, recordHistory_1.recordHistory)({
             table: 'UnitType',
@@ -136,11 +136,10 @@ exports.updateUnitType = (0, express_async_handler_1.default)(async (req, res) =
             res.status(400).json({ message: 'No changes detected in unit type' });
             return;
         }
-        // Record the history before updating
-        const userId = req.body.userID;
-        const user = await userModel_1.default.findOne({ userID: userId });
+        // Use authenticated user from Passport (req.user)
+        const user = req.user;
         if (!user) {
-            res.status(404).json({ message: 'User not found' });
+            res.status(401).json({ code: 'UNAUTHORIZED', message: 'User not authenticated' });
             return;
         }
         const updatedUnitType = await unitTypeModel_1.UnitTypeModel.findByIdAndUpdate(unitTypeId, { type: updateData.type }, {
@@ -163,7 +162,7 @@ exports.updateUnitType = (0, express_async_handler_1.default)(async (req, res) =
             action: 'update',
             performedBy: {
                 userId: user._id,
-                name: user.userName.slug,
+                name: ((user.userName && (user.userName.slug || user.userName.displayName)) || user.contactInfo.email),
                 role: user.role,
             },
             diff, // Assuming you want to log the changes
@@ -188,10 +187,10 @@ exports.deleteUnitType = (0, express_async_handler_1.default)(async (req, res) =
             res.status(404).json({ message: 'Unit type not found' });
             return;
         }
-        const userId = req.body.userID;
-        const user = await userModel_1.default.findOne({ userID: userId });
+        // Use authenticated user from Passport (req.user)
+        const user = req.user;
         if (!user) {
-            res.status(404).json({ message: 'User not found' });
+            res.status(401).json({ code: 'UNAUTHORIZED', message: 'User not authenticated' });
             return;
         }
         await unitTypeModel_1.UnitTypeModel.findByIdAndDelete(unitTypeId);
@@ -202,7 +201,7 @@ exports.deleteUnitType = (0, express_async_handler_1.default)(async (req, res) =
             action: 'delete',
             performedBy: {
                 userId: user._id,
-                name: user.userName.slug,
+                name: ((user.userName && (user.userName.slug || user.userName.displayName)) || user.contactInfo.email),
                 role: user.role,
             },
             diff: existingUnitType.toObject(), // Assuming you want to log the deleted unit type

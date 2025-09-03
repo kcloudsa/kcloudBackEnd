@@ -14,8 +14,7 @@ const locationSchema = new mongoose_1.Schema({
 exports.unitSchema = new mongoose_1.Schema({
     uniteGroupID: {
         type: mongoose_1.Schema.Types.ObjectId,
-        ref: 'UniteGroup',
-        required: true,
+        ref: 'UnitGroup',
     },
     userID: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true },
     unitTypeID: {

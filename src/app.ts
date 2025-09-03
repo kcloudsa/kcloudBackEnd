@@ -13,12 +13,53 @@ import { validateApiKey } from './middlewares/validateApiKey';
 import { AuthAPI } from './api/Auth';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
+import MongoStore from 'connect-mongo';
+import { mongoClientPromise } from './Utils/DBConnection';
+import passport from 'passport';
+import cron from 'node-cron';
+import { updateAllStatuses } from './services/statusUpdateServices';
+import { runNotificationChecks } from './services/autoNotificationServices';
 require('dotenv').config();
 
 const app = express();
 
 // Connect to DB
 DBConnection();
+
+// Schedule status update jobs
+// Run every hour to update unit and rental statuses
+cron.schedule('0 * * * *', async () => {
+  try {
+    console.log('Running scheduled status updates...');
+    await updateAllStatuses();
+    console.log('Scheduled status updates completed successfully');
+  } catch (error) {
+    console.error('Error in scheduled status updates:', error);
+  }
+});
+
+// Schedule notification checks
+// Run every 3 minutes to check for notification triggers
+cron.schedule('*/3 * * * *', async () => {
+  try {
+    console.log('Running scheduled notification checks...');
+    await runNotificationChecks();
+    console.log('Scheduled notification checks completed successfully');
+  } catch (error) {
+    console.error('Error in scheduled notification checks:', error);
+  }
+});
+
+// Run once at startup to ensure statuses are current
+setTimeout(async () => {
+  try {
+    console.log('Running startup status updates...');
+    await updateAllStatuses();
+    console.log('Startup status updates completed successfully');
+  } catch (error) {
+    console.error('Error in startup status updates:', error);
+  }
+}, 5000); // Wait 5 seconds after startup to ensure DB is ready
 
 // Set basic middleware
 app.use(morgan('dev'));
@@ -52,10 +93,15 @@ app.use(
 
 // Rate Limiter
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 2000, // Increased from 100 to 2000 for development
   standardHeaders: true,
   legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many requests from this IP, please try again later.',
+    code: 'GLOBAL_RATE_LIMIT_EXCEEDED'
+  }
 });
 app.use(limiter);
 
@@ -98,16 +144,29 @@ app.use(
 );
 
 // Add session middleware for OAuth state management
+// Configure session store backed by MongoDB so sessions survive server restarts
+const sessionTtlSeconds = Number(process.env.SESSION_TTL_SECONDS || 24 * 60 * 60 * 15); // default 24h
 app.use(session({
   secret: process.env.SESSION_SECRET || 'your-session-secret',
   resave: false,
   saveUninitialized: false,
+  rolling: true,
+  store: MongoStore.create({
+    clientPromise: mongoClientPromise(),
+    ttl: sessionTtlSeconds,
+    stringify: false,
+    autoRemove: 'native'
+  }),
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    maxAge: 10 * 60 * 1000 // 10 minutes
+    maxAge: sessionTtlSeconds * 1000
   }
 }));
+
+// Initialize Passport and restore authentication state from session
+app.use(passport.initialize());
+app.use(passport.session());
 
 // Force HTTPS in production (after setting trust proxy)
 // if (process.env.NODE_ENV === 'production') {
