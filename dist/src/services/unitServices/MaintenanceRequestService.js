@@ -80,7 +80,7 @@ exports.getAllMaintenanceRequests = (0, express_async_handler_1.default)(async (
             // Debug: log how many requests were found for this unit
             console.debug(`getAllMaintenanceRequests: found ${requests.length} requests for unit ${unitId}`);
             if (requests.length > 0)
-                console.debug('sample request ids:', requests.slice(0, 5).map(r => String(r._id)));
+                console.debug('sample request ids:', requests.slice(0, 5).map((r) => String(r._id)));
             return void res.json({ success: true, data: requests });
         }
         // No unit filter: admins can list all; normal users get requests for their units
@@ -90,7 +90,7 @@ exports.getAllMaintenanceRequests = (0, express_async_handler_1.default)(async (
             });
             console.debug(`getAllMaintenanceRequests: admin listing, total requests ${requests.length}`);
             if (requests.length > 0)
-                console.debug('sample request ids:', requests.slice(0, 5).map(r => String(r._id)));
+                console.debug('sample request ids:', requests.slice(0, 5).map((r) => String(r._id)));
             return void res.json({ success: true, data: requests });
         }
         // Find units owned by this user
@@ -101,7 +101,7 @@ exports.getAllMaintenanceRequests = (0, express_async_handler_1.default)(async (
         }).sort({ createdAt: -1 });
         console.debug(`getAllMaintenanceRequests: user-owned units listing, found ${requests.length} requests for user ${user._id}`);
         if (requests.length > 0)
-            console.debug('sample request ids:', requests.slice(0, 5).map(r => String(r._id)));
+            console.debug('sample request ids:', requests.slice(0, 5).map((r) => String(r._id)));
         return void res.json({ success: true, data: requests });
     }
     catch (error) {
@@ -117,7 +117,9 @@ exports.createMaintenanceRequest = (0, express_async_handler_1.default)(async (r
     try {
         const user = req.user;
         if (!user)
-            return void res.status(401).json({ success: false, message: 'Authentication required' });
+            return void res
+                .status(401)
+                .json({ success: false, message: 'Authentication required' });
         // Accept multiple possible field names that the frontend might send
         const body = req.body || {};
         const unitId = body.unitId ||
@@ -125,7 +127,7 @@ exports.createMaintenanceRequest = (0, express_async_handler_1.default)(async (r
             (body.unit && (body.unit.id || body.unit._id || body.unit.unitId)) ||
             undefined;
         const userIdFromBody = body.userId || body.userID || undefined;
-        const { title, description, priority } = body;
+        const { title, description, priority, credit } = body;
         const errors = [];
         if (!unitId || !mongoose_1.default.Types.ObjectId.isValid(unitId)) {
             errors.push('unitId');
@@ -133,7 +135,9 @@ exports.createMaintenanceRequest = (0, express_async_handler_1.default)(async (r
         if (!title || typeof title !== 'string' || title.trim() === '') {
             errors.push('title');
         }
-        if (!description || typeof description !== 'string' || description.trim() === '') {
+        if (!description ||
+            typeof description !== 'string' ||
+            description.trim() === '') {
             errors.push('description');
         }
         if (errors.length) {
@@ -150,10 +154,13 @@ exports.createMaintenanceRequest = (0, express_async_handler_1.default)(async (r
         const prio = priority && allowedPriorities.includes(priority) ? priority : 'medium';
         const unit = await unitModel_1.UnitModel.findById(unitId);
         if (!unit)
-            return void res.status(404).json({ success: false, message: 'Unit not found' });
+            return void res
+                .status(404)
+                .json({ success: false, message: 'Unit not found' });
         // Determine the reporter: allow admins to specify userId (accept variants), otherwise use authenticated user
         let reporterId = user._id;
-        if ((user.role === 'admin' || user.role === 'superadmin') && userIdFromBody) {
+        if ((user.role === 'admin' || user.role === 'superadmin') &&
+            userIdFromBody) {
             if (mongoose_1.default.Types.ObjectId.isValid(userIdFromBody))
                 reporterId = userIdFromBody;
         }
@@ -165,6 +172,7 @@ exports.createMaintenanceRequest = (0, express_async_handler_1.default)(async (r
             title: titleClean,
             description: descriptionClean,
             priority: prio,
+            credit: credit,
         });
         // Auto-update unit status when maintenance request is created
         try {
@@ -207,7 +215,11 @@ exports.createMaintenanceRequest = (0, express_async_handler_1.default)(async (r
     }
     catch (error) {
         console.error('Error creating maintenance request:', error);
-        res.status(500).json({ success: false, message: 'Failed to create maintenance request', error });
+        res.status(500).json({
+            success: false,
+            message: 'Failed to create maintenance request',
+            error,
+        });
     }
 });
 exports.getMaintenanceRequestByID = (0, express_async_handler_1.default)(async (req, res) => {
@@ -382,8 +394,13 @@ exports.deleteMaintenanceRequestsBulk = (0, express_async_handler_1.default)(asy
                 .status(403)
                 .json({ success: false, message: 'Access denied' });
         }
-        const result = await maintenanceRequestModel_1.MaintenanceRequestModel.deleteMany({ unitID: unitId });
-        return void res.json({ success: true, deletedCount: result.deletedCount });
+        const result = await maintenanceRequestModel_1.MaintenanceRequestModel.deleteMany({
+            unitID: unitId,
+        });
+        return void res.json({
+            success: true,
+            deletedCount: result.deletedCount,
+        });
     }
     catch (error) {
         console.error('Error deleting maintenance requests (bulk):', error);
@@ -442,8 +459,9 @@ exports.patchMaintenanceRequest = (0, express_async_handler_1.default)(async (re
             // Don't fail the request if status update fails
         }
         // Send notification if maintenance request is completed
-        if (updated && (updated.status === 'completed' || updated.status === 'closed')) {
-            (0, autoNotificationServices_1.notifyMaintenanceCompleted)(updated._id).catch(error => console.error('Error sending maintenance completion notification:', error));
+        if (updated &&
+            (updated.status === 'completed' || updated.status === 'closed')) {
+            (0, autoNotificationServices_1.notifyMaintenanceCompleted)(updated._id).catch((error) => console.error('Error sending maintenance completion notification:', error));
         }
         try {
             await (0, recordHistory_1.recordHistory)({

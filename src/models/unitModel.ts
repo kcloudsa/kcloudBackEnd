@@ -25,7 +25,7 @@ export const unitSchema = new Schema<IUnit>(
       ref: 'UnitType',
       required: true,
     },
-    number: { type: String, required: true, unique: true },
+    number: { type: String, required: true },
     description: { type: String, default: '' },
     notes: { type: String, default: '' },
     processingCost: { type: Number, required: true, default: 0 },

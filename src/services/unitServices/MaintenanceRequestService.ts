@@ -43,8 +43,14 @@ export const getAllMaintenanceRequests = asyncHandler(
           unitID: unitId,
         }).sort({ createdAt: -1 });
         // Debug: log how many requests were found for this unit
-        console.debug(`getAllMaintenanceRequests: found ${requests.length} requests for unit ${unitId}`);
-        if (requests.length > 0) console.debug('sample request ids:', requests.slice(0, 5).map(r => String(r._id)));
+        console.debug(
+          `getAllMaintenanceRequests: found ${requests.length} requests for unit ${unitId}`,
+        );
+        if (requests.length > 0)
+          console.debug(
+            'sample request ids:',
+            requests.slice(0, 5).map((r) => String(r._id)),
+          );
         return void res.json({ success: true, data: requests });
       }
 
@@ -53,8 +59,14 @@ export const getAllMaintenanceRequests = asyncHandler(
         const requests = await MaintenanceRequestModel.find({}).sort({
           createdAt: -1,
         });
-        console.debug(`getAllMaintenanceRequests: admin listing, total requests ${requests.length}`);
-        if (requests.length > 0) console.debug('sample request ids:', requests.slice(0, 5).map(r => String(r._id)));
+        console.debug(
+          `getAllMaintenanceRequests: admin listing, total requests ${requests.length}`,
+        );
+        if (requests.length > 0)
+          console.debug(
+            'sample request ids:',
+            requests.slice(0, 5).map((r) => String(r._id)),
+          );
         return void res.json({ success: true, data: requests });
       }
 
@@ -64,8 +76,14 @@ export const getAllMaintenanceRequests = asyncHandler(
       const requests = await MaintenanceRequestModel.find({
         unitID: { $in: unitIds },
       }).sort({ createdAt: -1 });
-      console.debug(`getAllMaintenanceRequests: user-owned units listing, found ${requests.length} requests for user ${user._id}`);
-      if (requests.length > 0) console.debug('sample request ids:', requests.slice(0, 5).map(r => String(r._id)));
+      console.debug(
+        `getAllMaintenanceRequests: user-owned units listing, found ${requests.length} requests for user ${user._id}`,
+      );
+      if (requests.length > 0)
+        console.debug(
+          'sample request ids:',
+          requests.slice(0, 5).map((r) => String(r._id)),
+        );
       return void res.json({ success: true, data: requests });
     } catch (error) {
       console.error('Error fetching maintenance requests:', error);
@@ -82,7 +100,10 @@ export const createMaintenanceRequest = asyncHandler(
   async (req: Request, res: Response) => {
     try {
       const user = req.user as any;
-      if (!user) return void res.status(401).json({ success: false, message: 'Authentication required' });
+      if (!user)
+        return void res
+          .status(401)
+          .json({ success: false, message: 'Authentication required' });
 
       // Accept multiple possible field names that the frontend might send
       const body = req.body || {};
@@ -92,11 +113,13 @@ export const createMaintenanceRequest = asyncHandler(
         (body.unit && (body.unit.id || body.unit._id || body.unit.unitId)) ||
         undefined;
 
-      const userIdFromBody = (body.userId as string) || (body.userID as string) || undefined;
-      const { title, description, priority } = body as {
+      const userIdFromBody =
+        (body.userId as string) || (body.userID as string) || undefined;
+      const { title, description, priority, credit } = body as {
         title?: string;
         description?: string;
         priority?: string;
+        credit?: number;
       };
 
       const errors: string[] = [];
@@ -106,13 +129,20 @@ export const createMaintenanceRequest = asyncHandler(
       if (!title || typeof title !== 'string' || title.trim() === '') {
         errors.push('title');
       }
-      if (!description || typeof description !== 'string' || description.trim() === '') {
+      if (
+        !description ||
+        typeof description !== 'string' ||
+        description.trim() === ''
+      ) {
         errors.push('description');
       }
 
       if (errors.length) {
         // Log received body for debugging
-        console.warn('createMaintenanceRequest validation failed, missing/invalid:', errors.join(', '));
+        console.warn(
+          'createMaintenanceRequest validation failed, missing/invalid:',
+          errors.join(', '),
+        );
         console.debug('Received body:', JSON.stringify(req.body));
         return void res.status(400).json({
           success: false,
@@ -122,15 +152,23 @@ export const createMaintenanceRequest = asyncHandler(
       }
 
       const allowedPriorities = ['low', 'medium', 'high'];
-      const prio = priority && allowedPriorities.includes(priority) ? priority : 'medium';
+      const prio =
+        priority && allowedPriorities.includes(priority) ? priority : 'medium';
 
       const unit = await UnitModel.findById(unitId);
-      if (!unit) return void res.status(404).json({ success: false, message: 'Unit not found' });
+      if (!unit)
+        return void res
+          .status(404)
+          .json({ success: false, message: 'Unit not found' });
 
       // Determine the reporter: allow admins to specify userId (accept variants), otherwise use authenticated user
       let reporterId: any = user._id;
-      if ((user.role === 'admin' || user.role === 'superadmin') && userIdFromBody) {
-        if (mongoose.Types.ObjectId.isValid(userIdFromBody)) reporterId = userIdFromBody;
+      if (
+        (user.role === 'admin' || user.role === 'superadmin') &&
+        userIdFromBody
+      ) {
+        if (mongoose.Types.ObjectId.isValid(userIdFromBody))
+          reporterId = userIdFromBody;
       }
 
       const titleClean = (title as string).trim();
@@ -142,6 +180,7 @@ export const createMaintenanceRequest = asyncHandler(
         title: titleClean,
         description: descriptionClean,
         priority: prio,
+        credit: credit,
       });
 
       // Auto-update unit status when maintenance request is created
@@ -184,7 +223,11 @@ export const createMaintenanceRequest = asyncHandler(
       return void res.status(201).json({ success: true, data: newRequest });
     } catch (error) {
       console.error('Error creating maintenance request:', error);
-      res.status(500).json({ success: false, message: 'Failed to create maintenance request', error });
+      res.status(500).json({
+        success: false,
+        message: 'Failed to create maintenance request',
+        error,
+      });
     }
   },
 );
@@ -381,15 +424,22 @@ export const deleteMaintenanceRequestsBulk = asyncHandler(
           .json({ success: false, message: 'Unit not found' });
 
       const user = req.user as any;
-      if (!(user.role === 'admin' || String(unit.userID) === String(user._id))) {
+      if (
+        !(user.role === 'admin' || String(unit.userID) === String(user._id))
+      ) {
         return void res
           .status(403)
           .json({ success: false, message: 'Access denied' });
       }
 
-      const result = await MaintenanceRequestModel.deleteMany({ unitID: unitId });
+      const result = await MaintenanceRequestModel.deleteMany({
+        unitID: unitId,
+      });
 
-      return void res.json({ success: true, deletedCount: result.deletedCount });
+      return void res.json({
+        success: true,
+        deletedCount: result.deletedCount,
+      });
     } catch (error) {
       console.error('Error deleting maintenance requests (bulk):', error);
       res.status(500).json({
@@ -460,9 +510,15 @@ export const patchMaintenanceRequest = asyncHandler(
       }
 
       // Send notification if maintenance request is completed
-      if (updated && (updated.status === 'completed' || updated.status === 'closed')) {
-        notifyMaintenanceCompleted(updated._id).catch(error => 
-          console.error('Error sending maintenance completion notification:', error)
+      if (
+        updated &&
+        (updated.status === 'completed' || updated.status === 'closed')
+      ) {
+        notifyMaintenanceCompleted(updated._id).catch((error) =>
+          console.error(
+            'Error sending maintenance completion notification:',
+            error,
+          ),
         );
       }
 
