@@ -53,19 +53,16 @@ passport_1.default.use(new passport_local_1.Strategy({
                 }
             }
             catch (bcryptError) {
-                console.log('bcrypt comparison failed, trying plain text for user:', email);
                 // If bcrypt fails, it might be a plain text password (legacy)
-                if (storedPassword === password) {
-                    console.log('Plain text password match found for user:', email, 'migrating to bcrypt...');
+                const plainTextMatch = storedPassword === password;
+                if (plainTextMatch) {
                     // Migrate the password to bcrypt hash
                     try {
-                        const saltRounds = 12;
-                        const hashedPassword = await bcryptjs_1.default.hash(password, saltRounds);
+                        const hashedPassword = password.startsWith('$2') ? password : await bcryptjs_1.default.hash(password, 12);
                         await userModel_1.default.updateOne({ 'contactInfo.email.email': email }, { 'password.hashed': hashedPassword });
-                        console.log('Password migrated to bcrypt for user:', email);
                     }
                     catch (migrationError) {
-                        console.error('Failed to migrate password for user:', email, migrationError);
+                        console.error('❌ Failed to migrate password for user:', email, migrationError);
                     }
                     return done(null, {
                         _id: user._id,
@@ -77,7 +74,6 @@ passport_1.default.use(new passport_local_1.Strategy({
                     });
                 }
             }
-            console.log('Password comparison failed for user:', email);
             return done(null, false, { message: 'Invalid email or password' });
         }
         return done(null, false, { message: 'Invalid email or password' });
@@ -166,7 +162,8 @@ if (googleClientId && googleClientSecret) {
                         },
                     },
                     password: {
-                        hashed: crypto_1.default.randomBytes(32).toString('hex'), // Random password for OAuth users
+                        // Provide plaintext; model pre-save will hash if not already bcrypt
+                        hashed: crypto_1.default.randomBytes(32).toString('hex'),
                         expirationDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
                     },
                     userInfo: {
@@ -306,9 +303,9 @@ router.post('/register', async (req, res) => {
                 error: 'VALIDATION_ERROR',
             });
         }
-        // Hash the password with bcrypt
-        const saltRounds = 12;
-        const hashedPassword = await bcryptjs_1.default.hash(passwordValue, saltRounds);
+        // Prepare password for saving: if value already looks like bcrypt, keep it; otherwise let model pre-save hook hash it
+        const looksHashed = typeof passwordValue === 'string' && passwordValue.startsWith('$2');
+        const preparedPassword = looksHashed ? passwordValue : passwordValue;
         // Check if email already exists
         const existingEmailUser = await userModel_1.default.findOne({
             'contactInfo.email.email': contactInfo.email.email,
@@ -353,7 +350,7 @@ router.post('/register', async (req, res) => {
                 },
             },
             password: {
-                hashed: hashedPassword, // Use the properly hashed password
+                hashed: preparedPassword, // Model pre-save hook will hash if needed
                 expirationDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
             },
             userInfo: {
@@ -689,9 +686,9 @@ router.post('/migrate-passwords', async (req, res) => {
                 }
                 // Migrate plain text password to bcrypt
                 try {
-                    const saltRounds = 12;
-                    const hashedPassword = await bcryptjs_1.default.hash(storedPassword, saltRounds);
-                    await userModel_1.default.updateOne({ _id: user._id }, { 'password.hashed': hashedPassword });
+                    const value = storedPassword;
+                    const updateValue = value.startsWith('$2') ? value : await bcryptjs_1.default.hash(value, 12);
+                    await userModel_1.default.updateOne({ _id: user._id }, { 'password.hashed': updateValue });
                     migrated++;
                     console.log(`Migrated password for user: ${user.contactInfo?.email?.email}`);
                 }
@@ -715,6 +712,131 @@ router.post('/migrate-passwords', async (req, res) => {
             message: 'Migration failed',
             error: error.message,
         });
+    }
+});
+// Debug endpoint to test password against stored hash (TEMPORARY - REMOVE AFTER DEBUGGING)
+router.post('/debug/test-password/:email', async (req, res) => {
+    try {
+        const { email } = req.params;
+        const { testPassword } = req.body;
+        if (!testPassword) {
+            return res.status(400).json({ error: 'testPassword is required' });
+        }
+        const user = await (0, userServices_1.getUserByEmail)(email);
+        if (!user || !user.password?.hashed) {
+            return res.json({ found: false, error: 'User or password not found' });
+        }
+        const storedHash = user.password.hashed;
+        // Test a few variations
+        const testVariations = [
+            testPassword,
+            testPassword.toLowerCase(),
+            testPassword.toUpperCase(),
+            testPassword.trim(),
+        ];
+        const results = [];
+        for (const variation of testVariations) {
+            try {
+                const isMatch = await bcryptjs_1.default.compare(variation, storedHash);
+                results.push({
+                    tested: variation,
+                    match: isMatch,
+                    description: variation === testPassword ? 'original' :
+                        variation === testPassword.toLowerCase() ? 'lowercase' :
+                            variation === testPassword.toUpperCase() ? 'uppercase' :
+                                'trimmed'
+                });
+            }
+            catch (error) {
+                results.push({
+                    tested: variation,
+                    match: false,
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                });
+            }
+        }
+        // Also test if we can generate a hash that would work
+        const newHash = await bcryptjs_1.default.hash(testPassword, 12);
+        const newHashTest = await bcryptjs_1.default.compare(testPassword, newHash);
+        return res.json({
+            found: true,
+            userID: user.userID,
+            email: user.contactInfo?.email?.email,
+            storedHashPrefix: storedHash.substring(0, 20),
+            testResults: results,
+            bcryptWorking: {
+                newHashGenerated: newHash.substring(0, 20),
+                newHashTest: newHashTest
+            }
+        });
+    }
+    catch (error) {
+        console.error('Debug password test error:', error);
+        return res.status(500).json({ error: 'Debug test failed' });
+    }
+});
+// Debug endpoint to check user password hash (TEMPORARY - REMOVE AFTER DEBUGGING)
+router.get('/debug/check-user/:email', async (req, res) => {
+    try {
+        const { email } = req.params;
+        const user = await (0, userServices_1.getUserByEmail)(email);
+        if (!user) {
+            return res.json({ found: false });
+        }
+        return res.json({
+            found: true,
+            userID: user.userID,
+            email: user.contactInfo?.email?.email,
+            hasPassword: !!user.password,
+            hasHashedPassword: !!user.password?.hashed,
+            passwordType: typeof user.password?.hashed,
+            passwordLength: user.password?.hashed?.length,
+            passwordStartsWith: {
+                '$2a$': user.password?.hashed?.startsWith('$2a$'),
+                '$2b$': user.password?.hashed?.startsWith('$2b$'),
+                '$2y$': user.password?.hashed?.startsWith('$2y$'),
+            },
+            passwordPrefix: user.password?.hashed?.substring(0, 20),
+        });
+    }
+    catch (error) {
+        console.error('Debug check error:', error);
+        return res.status(500).json({ error: 'Debug check failed' });
+    }
+});
+// Debug endpoint to reset password (TEMPORARY - REMOVE AFTER DEBUGGING)
+router.post('/debug/reset-password/:email', async (req, res) => {
+    try {
+        const { email } = req.params;
+        const { newPassword, adminSecret } = req.body;
+        // Basic security check
+        if (adminSecret !== 'dev-reset-password-123') {
+            return res.status(403).json({ error: 'Unauthorized' });
+        }
+        if (!newPassword) {
+            return res.status(400).json({ error: 'newPassword is required' });
+        }
+        const user = await (0, userServices_1.getUserByEmail)(email);
+        if (!user) {
+            return res.json({ found: false, error: 'User not found' });
+        }
+        // Hash the new password
+        const hashedPassword = newPassword.startsWith('$2') ? newPassword : await bcryptjs_1.default.hash(newPassword, 12);
+        // Update the password in the database
+        await userModel_1.default.updateOne({ 'contactInfo.email.email': email }, { 'password.hashed': hashedPassword });
+        // Test the new password (always test plaintext against stored hash)
+        const testResult = await bcryptjs_1.default.compare(newPassword, hashedPassword);
+        return res.json({
+            success: true,
+            message: 'Password reset successfully',
+            userID: user.userID,
+            email: user.contactInfo?.email?.email,
+            newPasswordTest: testResult
+        });
+    }
+    catch (error) {
+        console.error('Debug password reset error:', error);
+        return res.status(500).json({ error: 'Debug reset failed' });
     }
 });
 // Error handling middleware

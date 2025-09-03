@@ -117,11 +117,24 @@ const userSchema = new mongoose_1.Schema({
     },
 });
 userSchema.pre('save', async function (next) {
-    if (!this.isModified('password') || !this.password?.hashed)
-        return next();
-    this.userName.slug = (0, slugify_1.slugify)(`${this.userName.firstName} ${this.userName.lastName}`);
-    this.password.hashed = await bcryptjs_1.default.hash(this.password.hashed, 12);
-    next();
+    try {
+        const self = this;
+        // Keep slug up to date when name changes or on create
+        if (self.isNew || self.isModified('userName.firstName') || self.isModified('userName.lastName')) {
+            self.userName.slug = (0, slugify_1.slugify)(`${self.userName.firstName} ${self.userName.lastName}`);
+        }
+        // Hash password only if the plaintext (non-bcrypt) value was set/changed
+        if (self.isModified('password.hashed')) {
+            const current = self.password?.hashed;
+            if (current && !current.startsWith('$2')) {
+                self.password.hashed = await bcryptjs_1.default.hash(current, 12);
+            }
+        }
+        next();
+    }
+    catch (err) {
+        next(err);
+    }
 });
 const UserModel = mongoose_1.default.model('User', userSchema);
 exports.default = UserModel;
