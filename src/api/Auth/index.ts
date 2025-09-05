@@ -619,12 +619,18 @@ router.post('/logout', async (req: Request, res: Response) => {
       });
     }
 
-    // Logout from passport session
-    req.logout((err) => {
-      if (err) {
-        console.error('Passport logout error:', err);
-      }
-    });
+    // Logout from passport session only if a session exists and user is authenticated
+    const canUseSessionLogout = Boolean(
+      req.session && typeof (req as any).logout === 'function' &&
+      typeof (req as any).isAuthenticated === 'function' && (req as any).isAuthenticated()
+    );
+    if (canUseSessionLogout) {
+      (req as any).logout((err: any) => {
+        if (err) {
+          console.error('Passport logout error:', err);
+        }
+      });
+    }
 
     return res.status(200).json({
       success: true,

@@ -539,12 +539,16 @@ router.post('/logout', async (req, res) => {
                 }
             });
         }
-        // Logout from passport session
-        req.logout((err) => {
-            if (err) {
-                console.error('Passport logout error:', err);
-            }
-        });
+        // Logout from passport session only if a session exists and user is authenticated
+        const canUseSessionLogout = Boolean(req.session && typeof req.logout === 'function' &&
+            typeof req.isAuthenticated === 'function' && req.isAuthenticated());
+        if (canUseSessionLogout) {
+            req.logout((err) => {
+                if (err) {
+                    console.error('Passport logout error:', err);
+                }
+            });
+        }
         return res.status(200).json({
             success: true,
             message: 'Logout successful',
