@@ -5,6 +5,7 @@ import {
   deleteUser,
   getUserById,
   updateUser,
+  changePassword,
 } from '../../services/userServices';
 import { requireAuth } from '../../middlewares/authQuery';
 import {
@@ -53,5 +54,13 @@ router
     enforceUserOwnership('user'), // Users can only delete their own profile
     deleteUser,
   );
+
+// Change password
+router.post(
+  '/:id/password',
+  requireAuth,
+  enforceUserOwnership('user'),
+  changePassword,
+);
 
 export default router;

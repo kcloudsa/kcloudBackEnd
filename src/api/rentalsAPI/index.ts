@@ -11,11 +11,15 @@ import {
 import {
   createMoveType,
   getmoveTypes,
+  updateMoveType,
+  deleteMoveType,
 } from '../../services/rentalSevices/moveTypeServices';
 import {
   createRentalSource,
   getRentalSources,
   getRentalSourceById,
+  updateRentalSource,
+  deleteRentalSource,
 } from '../../services/rentalSevices/rentalSource';
 import { requireAuth } from '../../middlewares/authQuery';
 import {
@@ -98,12 +102,12 @@ router.route('/user').get(
 
 // Move type routes (these are typically shared data)
 router.route('/movetype').get(getmoveTypes).post(createMoveType);
+router.route('/movetype/:id').patch(updateMoveType).delete(deleteMoveType);
 
 // Rental source routes (these are typically shared data)
 router.route('/rentalsource').get(getRentalSources).post(createRentalSource);
+router.route('/rentalsource/:id').get(getRentalSourceById).patch(updateRentalSource).delete(deleteRentalSource);
 
-// Single rental source by id
-router.route('/rentalsource/:id').get(getRentalSourceById);
 
 // Individual rental routes with ownership enforcement
 router

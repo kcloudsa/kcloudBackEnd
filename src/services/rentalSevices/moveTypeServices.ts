@@ -136,3 +136,129 @@ export const createMoveType = asyncHandler(
     }
   },
 );
+
+export const updateMoveType = asyncHandler(
+  async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id as string | undefined;
+      if (!id) {
+        res.status(400).json({ message: 'id parameter is required' });
+        return;
+      }
+
+      const user = (req.user as any) as Iuser | undefined;
+      if (!user) {
+        res.status(401).json({ code: 'UNAUTHORIZED', message: 'User not authenticated' });
+        return;
+      }
+
+      const existing = await MoveTypeModel.findById(id);
+      if (!existing) {
+        res.status(404).json({ message: 'Move type not found' });
+        return;
+      }
+
+      // Ownership check
+      if (existing.userId && String(existing.userId) !== String((user as any)._id)) {
+        res.status(403).json({ message: 'Forbidden: cannot modify this move type' });
+        return;
+      }
+
+      const { type } = req.body || {};
+      if (!type || typeof type !== 'string' || !type.trim()) {
+        res.status(400).json({ message: 'type is required' });
+        return;
+      }
+
+      if (type.trim() === existing.type) {
+        res.status(400).json({ message: 'No changes detected' });
+        return;
+      }
+
+      // Ensure uniqueness for this user
+      const duplicate = await MoveTypeModel.findOne({ type: type.trim(), userId: existing.userId });
+      if (duplicate) {
+        res.status(409).json({ message: 'Move type already exists for this user' });
+        return;
+      }
+
+      const prev = existing.toObject();
+      existing.type = type.trim();
+      const updated = await existing.save();
+
+      await recordHistory({
+        table: 'MoveType',
+        documentId: updated._id as Types.ObjectId,
+        action: 'update',
+        performedBy: {
+          userId: (user as any)._id as Types.ObjectId,
+          name: ((user.userName && (user.userName.slug || user.userName.displayName)) || (user as any).contactInfo?.email) as string,
+          role: user.role,
+        },
+        diff: {
+          type: { from: prev.type, to: updated.type },
+        },
+        reason: 'User updated move type',
+      });
+
+      res.status(200).json({ success: true, data: updated });
+      return;
+    } catch (error) {
+      console.error('Error updating Move type :', error);
+      res.status(500).json({ message: 'Failed to update Move type', error });
+      return;
+    }
+  },
+);
+
+export const deleteMoveType = asyncHandler(
+  async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id as string | undefined;
+      if (!id) {
+        res.status(400).json({ message: 'id parameter is required' });
+        return;
+      }
+
+      const user = (req.user as any) as Iuser | undefined;
+      if (!user) {
+        res.status(401).json({ code: 'UNAUTHORIZED', message: 'User not authenticated' });
+        return;
+      }
+
+      const existing = await MoveTypeModel.findById(id);
+      if (!existing) {
+        res.status(404).json({ message: 'Move type not found' });
+        return;
+      }
+
+      // Ownership check
+      if (existing.userId && String(existing.userId) !== String((user as any)._id)) {
+        res.status(403).json({ message: 'Forbidden: cannot delete this move type' });
+        return;
+      }
+
+      await MoveTypeModel.findByIdAndDelete(id);
+
+      await recordHistory({
+        table: 'MoveType',
+        documentId: existing._id as Types.ObjectId,
+        action: 'delete',
+        performedBy: {
+          userId: (user as any)._id as Types.ObjectId,
+          name: ((user.userName && (user.userName.slug || user.userName.displayName)) || (user as any).contactInfo?.email) as string,
+          role: user.role,
+        },
+        diff: existing.toObject(),
+        reason: 'User deleted move type',
+      });
+
+      res.status(200).json({ success: true, message: 'Move type deleted successfully' });
+      return;
+    } catch (error) {
+      console.error('Error deleting Move type :', error);
+      res.status(500).json({ message: 'Failed to delete Move type', error });
+      return;
+    }
+  },
+);

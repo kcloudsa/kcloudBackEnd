@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getRentalSourceById = exports.createRentalSource = exports.getRentalSources = exports.namerentalSource = void 0;
+exports.deleteRentalSource = exports.updateRentalSource = exports.getRentalSourceById = exports.createRentalSource = exports.getRentalSources = exports.namerentalSource = void 0;
 const express_async_handler_1 = __importDefault(require("express-async-handler"));
 const recordHistory_1 = require("../../Utils/recordHistory");
 const rentalSourceModel_1 = require("../../models/rentalSourceModel");
@@ -117,6 +117,114 @@ exports.getRentalSourceById = (0, express_async_handler_1.default)(async (req, r
     catch (error) {
         console.error('Error fetching rental source by id:', error);
         res.status(500).json({ message: 'Failed to fetch rental source', error });
+        return;
+    }
+});
+exports.updateRentalSource = (0, express_async_handler_1.default)(async (req, res) => {
+    try {
+        const id = req.params.id;
+        if (!id) {
+            res.status(400).json({ message: 'id parameter is required' });
+            return;
+        }
+        const user = req.user;
+        if (!user) {
+            res.status(401).json({ code: 'UNAUTHORIZED', message: 'User not authenticated' });
+            return;
+        }
+        const existing = await rentalSourceModel_1.RentalSourceModel.findById(id);
+        if (!existing) {
+            res.status(404).json({ message: 'Rental source not found' });
+            return;
+        }
+        if (existing.userId && String(existing.userId) !== String(user._id)) {
+            res.status(403).json({ message: 'Forbidden: cannot modify this rental source' });
+            return;
+        }
+        const { SourceName, description } = req.body || {};
+        if (!SourceName || typeof SourceName !== 'string' || !SourceName.trim()) {
+            res.status(400).json({ message: 'SourceName is required' });
+            return;
+        }
+        if (SourceName.trim() === existing.SourceName && (description ?? '') === (existing.description ?? '')) {
+            res.status(400).json({ message: 'No changes detected' });
+            return;
+        }
+        // Ensure uniqueness per user
+        const duplicate = await rentalSourceModel_1.RentalSourceModel.findOne({ SourceName: SourceName.trim(), userId: existing.userId });
+        if (duplicate && String(duplicate._id) !== String(existing._id)) {
+            res.status(409).json({ message: 'Rental source already exists for this user' });
+            return;
+        }
+        const prev = existing.toObject();
+        existing.SourceName = SourceName.trim();
+        if (typeof description === 'string')
+            existing.description = description;
+        const updated = await existing.save();
+        await (0, recordHistory_1.recordHistory)({
+            table: 'RentalSource',
+            documentId: updated._id,
+            action: 'update',
+            performedBy: {
+                userId: user._id,
+                name: ((user.userName && (user.userName.slug || user.userName.displayName)) || user.contactInfo?.email),
+                role: user.role,
+            },
+            diff: {
+                SourceName: { from: prev.SourceName, to: updated.SourceName },
+                ...(prev.description !== updated.description ? { description: { from: prev.description, to: updated.description } } : {}),
+            },
+            reason: 'User updated rental source',
+        });
+        res.status(200).json({ success: true, data: updated });
+        return;
+    }
+    catch (error) {
+        console.error('Error updating rental source:', error);
+        res.status(500).json({ message: 'Failed to update rental source', error });
+        return;
+    }
+});
+exports.deleteRentalSource = (0, express_async_handler_1.default)(async (req, res) => {
+    try {
+        const id = req.params.id;
+        if (!id) {
+            res.status(400).json({ message: 'id parameter is required' });
+            return;
+        }
+        const user = req.user;
+        if (!user) {
+            res.status(401).json({ code: 'UNAUTHORIZED', message: 'User not authenticated' });
+            return;
+        }
+        const existing = await rentalSourceModel_1.RentalSourceModel.findById(id);
+        if (!existing) {
+            res.status(404).json({ message: 'Rental source not found' });
+            return;
+        }
+        if (existing.userId && String(existing.userId) !== String(user._id)) {
+            res.status(403).json({ message: 'Forbidden: cannot delete this rental source' });
+            return;
+        }
+        await rentalSourceModel_1.RentalSourceModel.findByIdAndDelete(id);
+        await (0, recordHistory_1.recordHistory)({
+            table: 'RentalSource',
+            documentId: existing._id,
+            action: 'delete',
+            performedBy: {
+                userId: user._id,
+                name: ((user.userName && (user.userName.slug || user.userName.displayName)) || user.contactInfo?.email),
+                role: user.role,
+            },
+            diff: existing.toObject(),
+            reason: 'User deleted rental source',
+        });
+        res.status(200).json({ success: true, message: 'Rental source deleted successfully' });
+        return;
+    }
+    catch (error) {
+        console.error('Error deleting rental source:', error);
+        res.status(500).json({ message: 'Failed to delete rental source', error });
         return;
     }
 });

@@ -33,4 +33,6 @@ userServices_1.getUserById)
 userServices_1.updateUser)
     .delete(authQuery_1.requireAuth, (0, userIsolation_1.enforceUserOwnership)('user'), // Users can only delete their own profile
 userServices_1.deleteUser);
+// Change password
+router.post('/:id/password', authQuery_1.requireAuth, (0, userIsolation_1.enforceUserOwnership)('user'), userServices_1.changePassword);
 exports.default = router;

@@ -133,3 +133,129 @@ export const getRentalSourceById = asyncHandler(
     }
   },
 );
+
+export const updateRentalSource = asyncHandler(
+  async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id as string | undefined;
+      if (!id) {
+        res.status(400).json({ message: 'id parameter is required' });
+        return;
+      }
+
+      const user = (req.user as any) as Iuser | undefined;
+      if (!user) {
+        res.status(401).json({ code: 'UNAUTHORIZED', message: 'User not authenticated' });
+        return;
+      }
+
+      const existing = await RentalSourceModel.findById(id);
+      if (!existing) {
+        res.status(404).json({ message: 'Rental source not found' });
+        return;
+      }
+
+      if (existing.userId && String(existing.userId) !== String((user as any)._id)) {
+        res.status(403).json({ message: 'Forbidden: cannot modify this rental source' });
+        return;
+      }
+
+      const { SourceName, description } = req.body || {};
+      if (!SourceName || typeof SourceName !== 'string' || !SourceName.trim()) {
+        res.status(400).json({ message: 'SourceName is required' });
+        return;
+      }
+
+      if (SourceName.trim() === existing.SourceName && (description ?? '') === (existing.description ?? '')) {
+        res.status(400).json({ message: 'No changes detected' });
+        return;
+      }
+
+      // Ensure uniqueness per user
+      const duplicate = await RentalSourceModel.findOne({ SourceName: SourceName.trim(), userId: existing.userId });
+      if (duplicate && String(duplicate._id) !== String(existing._id)) {
+        res.status(409).json({ message: 'Rental source already exists for this user' });
+        return;
+      }
+
+      const prev = existing.toObject();
+      existing.SourceName = SourceName.trim();
+      if (typeof description === 'string') existing.description = description;
+      const updated = await existing.save();
+
+      await recordHistory({
+        table: 'RentalSource',
+        documentId: updated._id as Types.ObjectId,
+        action: 'update',
+        performedBy: {
+          userId: (user as any)._id as Types.ObjectId,
+          name: ((user.userName && (user.userName.slug || user.userName.displayName)) || (user as any).contactInfo?.email) as string,
+          role: user.role,
+        },
+        diff: {
+          SourceName: { from: prev.SourceName, to: updated.SourceName },
+          ...(prev.description !== updated.description ? { description: { from: prev.description, to: updated.description } } : {}),
+        },
+        reason: 'User updated rental source',
+      });
+
+      res.status(200).json({ success: true, data: updated });
+      return;
+    } catch (error) {
+      console.error('Error updating rental source:', error);
+      res.status(500).json({ message: 'Failed to update rental source', error });
+      return;
+    }
+  },
+);
+
+export const deleteRentalSource = asyncHandler(
+  async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id as string | undefined;
+      if (!id) {
+        res.status(400).json({ message: 'id parameter is required' });
+        return;
+      }
+
+      const user = (req.user as any) as Iuser | undefined;
+      if (!user) {
+        res.status(401).json({ code: 'UNAUTHORIZED', message: 'User not authenticated' });
+        return;
+      }
+
+      const existing = await RentalSourceModel.findById(id);
+      if (!existing) {
+        res.status(404).json({ message: 'Rental source not found' });
+        return;
+      }
+
+      if (existing.userId && String(existing.userId) !== String((user as any)._id)) {
+        res.status(403).json({ message: 'Forbidden: cannot delete this rental source' });
+        return;
+      }
+
+      await RentalSourceModel.findByIdAndDelete(id);
+
+      await recordHistory({
+        table: 'RentalSource',
+        documentId: existing._id as Types.ObjectId,
+        action: 'delete',
+        performedBy: {
+          userId: (user as any)._id as Types.ObjectId,
+          name: ((user.userName && (user.userName.slug || user.userName.displayName)) || (user as any).contactInfo?.email) as string,
+          role: user.role,
+        },
+        diff: existing.toObject(),
+        reason: 'User deleted rental source',
+      });
+
+      res.status(200).json({ success: true, message: 'Rental source deleted successfully' });
+      return;
+    } catch (error) {
+      console.error('Error deleting rental source:', error);
+      res.status(500).json({ message: 'Failed to delete rental source', error });
+      return;
+    }
+  },
+);

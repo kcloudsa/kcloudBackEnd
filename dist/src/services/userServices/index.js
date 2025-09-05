@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getUserByEmail = exports.deleteUser = exports.updateUser = exports.getUserById = exports.allUsers = exports.createUser = exports.nameUser = void 0;
+exports.changePassword = exports.getUserByEmail = exports.deleteUser = exports.updateUser = exports.getUserById = exports.allUsers = exports.createUser = exports.nameUser = void 0;
 const schema_1 = require("../../validation/user/schema");
 const userModel_1 = __importDefault(require("../../models/userModel"));
 // eslint-disable-next-line import/no-extraneous-dependencies
@@ -11,6 +11,7 @@ const express_async_handler_1 = __importDefault(require("express-async-handler")
 const recordHistory_1 = require("../../Utils/recordHistory");
 const deepDiff_1 = require("../../Utils/deepDiff");
 const deepMerge_1 = require("../../Utils/deepMerge");
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 exports.nameUser = (0, express_async_handler_1.default)(async (req, res) => {
     try {
         const emojis = ['yahia', '😀', '😳', '🙄'];
@@ -241,3 +242,61 @@ const getUserByEmail = async (email) => {
     }
 };
 exports.getUserByEmail = getUserByEmail;
+// Change user password with optional old password verification
+exports.changePassword = (0, express_async_handler_1.default)(async (req, res) => {
+    try {
+        const userId = req.params.id;
+        const { oldPassword, newPassword, allowWithoutOld } = req.body;
+        if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8) {
+            res.status(400).json({ message: 'New password must be at least 8 characters' });
+            return;
+        }
+        const user = await userModel_1.default.findOne({ userID: userId });
+        if (!user) {
+            res.status(404).json({ message: 'User not found' });
+            return;
+        }
+        const storedHash = user.password?.hashed || '';
+        // Require old password unless explicitly allowed (e.g., OAuth user setting password first time)
+        if (!allowWithoutOld) {
+            if (!oldPassword) {
+                res.status(400).json({ message: 'Current password is required' });
+                return;
+            }
+            if (storedHash) {
+                const isMatch = await bcryptjs_1.default.compare(oldPassword, storedHash);
+                if (!isMatch) {
+                    res.status(401).json({ message: 'Current password is incorrect' });
+                    return;
+                }
+            }
+        }
+        const hashedPassword = newPassword.startsWith('$2')
+            ? newPassword
+            : await bcryptjs_1.default.hash(newPassword, 12);
+        // Use save() to trigger any model hooks
+        user.password = {
+            ...(user.password || {}),
+            hashed: hashedPassword,
+            expirationDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        };
+        await user.save();
+        await (0, recordHistory_1.recordHistory)({
+            table: 'User',
+            documentId: user._id,
+            action: 'update',
+            performedBy: {
+                userId: user._id,
+                name: user.userName.slug,
+                role: user.role,
+            },
+            diff: { password: 'updated' },
+            reason: 'User changed password',
+        });
+        res.status(200).json({ success: true, message: 'Password updated successfully' });
+    }
+    catch (error) {
+        console.error('Error changing password:', error);
+        res.status(500).json({ message: 'Failed to change password', error });
+    }
+});

@@ -4,10 +4,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const app_1 = __importDefault(require("../src/app"));
-const port = process.env.PORT || 8000;
+const port = Number(process.env.PORT) || 8000;
+const hostname = "0.0.0.0";
 // For local development
 // if (process.env.NODE_ENV !== 'production') {
-app_1.default.listen(port, () => {
+app_1.default.listen(port, hostname, () => {
     /* eslint-disable no-console */
     console.log(`Listening: http://localhost:${port}`);
     /* eslint-enable no-console */

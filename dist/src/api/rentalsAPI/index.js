@@ -87,10 +87,10 @@ router.route('/user').get((0, userIsolation_1.validateAuthQueryWithUserIsolation
 }), rentalSevices_1.getRentalsByUserID);
 // Move type routes (these are typically shared data)
 router.route('/movetype').get(moveTypeServices_1.getmoveTypes).post(moveTypeServices_1.createMoveType);
+router.route('/movetype/:id').patch(moveTypeServices_1.updateMoveType).delete(moveTypeServices_1.deleteMoveType);
 // Rental source routes (these are typically shared data)
 router.route('/rentalsource').get(rentalSource_1.getRentalSources).post(rentalSource_1.createRentalSource);
-// Single rental source by id
-router.route('/rentalsource/:id').get(rentalSource_1.getRentalSourceById);
+router.route('/rentalsource/:id').get(rentalSource_1.getRentalSourceById).patch(rentalSource_1.updateRentalSource).delete(rentalSource_1.deleteRentalSource);
 // Individual rental routes with ownership enforcement
 router
     .route('/:id')

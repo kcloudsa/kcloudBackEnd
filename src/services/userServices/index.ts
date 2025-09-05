@@ -13,6 +13,7 @@ import { recordHistory } from '../../Utils/recordHistory';
 import { Types } from 'mongoose';
 import { getDeepDiff } from '../../Utils/deepDiff';
 import { deepMerge } from '../../Utils/deepMerge';
+import bcrypt from 'bcryptjs';
 
 export const nameUser = asyncHandler(async (req: Request, res: Response) => {
   try {
@@ -253,3 +254,73 @@ export const getUserByEmail = async (email: string): Promise<Iuser | null> => {
     throw error; // let caller handle errors
   }
 };
+
+// Change user password with optional old password verification
+export const changePassword = asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const userId = req.params.id;
+    const { oldPassword, newPassword, allowWithoutOld } = req.body as {
+      oldPassword?: string;
+      newPassword?: string;
+      allowWithoutOld?: boolean;
+    };
+
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8) {
+      res.status(400).json({ message: 'New password must be at least 8 characters' });
+      return;
+    }
+
+    const user = await UserModel.findOne({ userID: userId });
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+
+    const storedHash = (user.password?.hashed as string) || '';
+
+    // Require old password unless explicitly allowed (e.g., OAuth user setting password first time)
+    if (!allowWithoutOld) {
+      if (!oldPassword) {
+        res.status(400).json({ message: 'Current password is required' });
+        return;
+      }
+      if (storedHash) {
+        const isMatch = await bcrypt.compare(oldPassword, storedHash);
+        if (!isMatch) {
+          res.status(401).json({ message: 'Current password is incorrect' });
+          return;
+        }
+      }
+    }
+
+    const hashedPassword = newPassword.startsWith('$2')
+      ? newPassword
+      : await bcrypt.hash(newPassword, 12);
+
+    // Use save() to trigger any model hooks
+    user.password = {
+      ...(user.password || {}),
+      hashed: hashedPassword,
+      expirationDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+    } as IPassword;
+    await user.save();
+
+    await recordHistory({
+      table: 'User',
+      documentId: user._id as Types.ObjectId,
+      action: 'update',
+      performedBy: {
+        userId: user._id as Types.ObjectId,
+        name: user.userName.slug,
+        role: user.role,
+      },
+      diff: { password: 'updated' },
+      reason: 'User changed password',
+    });
+
+    res.status(200).json({ success: true, message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Error changing password:', error);
+    res.status(500).json({ message: 'Failed to change password', error });
+  }
+});

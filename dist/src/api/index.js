@@ -27,14 +27,14 @@ router.post('/update-statuses', async (req, res) => {
         await (0, statusUpdateServices_1.updateAllStatuses)();
         res.json({
             message: 'Status updates completed successfully',
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         });
     }
     catch (error) {
         console.error('Manual status update error:', error);
         res.status(500).json({
             error: 'Failed to update statuses',
-            message: error instanceof Error ? error.message : 'Unknown error'
+            message: error instanceof Error ? error.message : 'Unknown error',
         });
     }
 });
@@ -44,14 +44,14 @@ router.post('/check-notifications', async (req, res) => {
         await (0, autoNotificationServices_1.runNotificationChecks)();
         res.json({
             message: 'Notification checks completed successfully',
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         });
     }
     catch (error) {
         console.error('Manual notification check error:', error);
         res.status(500).json({
             error: 'Failed to run notification checks',
-            message: error instanceof Error ? error.message : 'Unknown error'
+            message: error instanceof Error ? error.message : 'Unknown error',
         });
     }
 });
