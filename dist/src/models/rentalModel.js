@@ -110,31 +110,6 @@ const rentalSchema = new mongoose_1.Schema({
         periodicDuration: { type: Number },
         isPercentage: { type: Boolean },
     },
-    specialPrices: [
-        {
-            type: {
-                type: String,
-                enum: ['weekly', 'once', 'monthly'],
-            },
-            // For `weekly` type
-            dayOfWeek: {
-                type: String,
-                enum: [
-                    'Sunday',
-                    'Monday',
-                    'Tuesday',
-                    'Wednesday',
-                    'Thursday',
-                    'Friday',
-                    'Saturday',
-                ],
-            },
-            // For `once` type
-            date: Date,
-            // Special price
-            price: { type: Number, min: 0 },
-        },
-    ],
     participats: {
         owner: {
             userID: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User' },

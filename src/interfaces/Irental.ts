@@ -11,19 +11,6 @@ export interface IParticipant {
   role: 'owner' | 'tentant';
 }
 
-export interface IspecialPrice {
-  type: 'weekly' | 'once' | 'monthly';
-  dayOfWeek?:
-    | 'Sunday'
-    | 'Monday'
-    | 'Tuesday'
-    | 'Wednesday'
-    | 'Thursday'
-    | 'Friday'
-    | 'Saturday';
-  date?: Date;
-  price: number;
-}
 export interface Irental extends Document {
   userID: Schema.Types.ObjectId; // Primary owner/creator of the rental
   unitID: Schema.Types.ObjectId; // Reference to the unit
@@ -68,7 +55,6 @@ export interface Irental extends Document {
     owner: IParticipant;
     tentant: IParticipant;
   };
-  specialPrices?: IspecialPrice[];
   createdAt?: Date;
   updatedAt?: Date;
 }

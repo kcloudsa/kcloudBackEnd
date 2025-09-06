@@ -11,6 +11,23 @@ const locationSchema = new mongoose_1.Schema({
         longitude: { type: Number, required: false },
     },
 }, { _id: false });
+const specialPriceSchema = new mongoose_1.Schema({
+    type: { type: String, enum: ['weekly', 'once', 'monthly'], required: true },
+    dayOfWeek: {
+        type: String,
+        enum: [
+            'Sunday',
+            'Monday',
+            'Tuesday',
+            'Wednesday',
+            'Thursday',
+            'Friday',
+            'Saturday',
+        ],
+    },
+    date: { type: Date },
+    price: { type: Number, min: 0, required: true },
+}, { _id: true, timestamps: false });
 exports.unitSchema = new mongoose_1.Schema({
     uniteGroupID: {
         type: mongoose_1.Schema.Types.ObjectId,
@@ -35,6 +52,7 @@ exports.unitSchema = new mongoose_1.Schema({
         enum: ['available', 'reserved', 'under_maintenance'],
         default: 'available',
     },
+    specialPrices: { type: [specialPriceSchema], default: [] },
 }, {
     timestamps: true,
 });

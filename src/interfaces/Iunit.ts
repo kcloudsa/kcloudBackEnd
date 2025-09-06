@@ -14,6 +14,20 @@ export interface Ilocation {
   geo?: Igeo; // Optional, for geolocation
 }
 
+export interface IspecialPrice {
+  type: 'weekly' | 'once' | 'monthly';
+  dayOfWeek?:
+    | 'Sunday'
+    | 'Monday'
+    | 'Tuesday'
+    | 'Wednesday'
+    | 'Thursday'
+    | 'Friday'
+    | 'Saturday';
+  date?: Date;
+  price: number;
+}
+
 export interface IUnit extends Document {
   uniteGroupID: Schema.Types.ObjectId;
   userID: Schema.Types.ObjectId;
@@ -27,4 +41,5 @@ export interface IUnit extends Document {
   unitMedia?: string[];
   favorite: boolean;
   unitStatus: string; // ["available", "Reserved", "Under_maintenance"]
+  specialPrices: IspecialPrice[];
 }

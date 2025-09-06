@@ -62,6 +62,14 @@ router
     .get((0, userIsolation_1.enforceUserOwnership)('unit'), unitServices_1.getUnitById)
     .patch((0, userIsolation_1.enforceUserOwnership)('unit'), unitServices_1.updateUnit)
     .delete((0, userIsolation_1.enforceUserOwnership)('unit'), unitServices_1.deleteUnit);
+// Special prices sub-routes
+router
+    .route('/:id/special-prices')
+    .get((0, userIsolation_1.enforceUserOwnership)('unit'), unitServices_1.listSpecialPrices)
+    .post((0, userIsolation_1.enforceUserOwnership)('unit'), unitServices_1.addSpecialPrices);
+router
+    .route('/:id/special-prices/:spId')
+    .delete((0, userIsolation_1.enforceUserOwnership)('unit'), unitServices_1.deleteSpecialPrice);
 // Unit-specific moves routes (moves for a specific unit)
 router
     .route('/:id/moves')

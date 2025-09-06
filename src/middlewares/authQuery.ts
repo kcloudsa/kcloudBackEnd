@@ -146,7 +146,8 @@ export const validateAuthQuery = (options?: {
 
       // Enum validations
       if (query.unitStatus) {
-        const validStatuses = ['available', 'occupied', 'maintenance', 'reserved'];
+        // Align with Unit model enum: ['available', 'reserved', 'under_maintenance']
+        const validStatuses = ['available', 'reserved', 'under_maintenance'];
         if (!validStatuses.includes(query.unitStatus as string)) {
           return res.status(400).json({
             success: false,

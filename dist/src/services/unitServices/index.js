@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteUnit = exports.updateUnit = exports.getUnitById = exports.getUnits = exports.createUnit = exports.nameUnit = void 0;
+exports.deleteUnit = exports.listSpecialPrices = exports.deleteSpecialPrice = exports.addSpecialPrices = exports.updateUnit = exports.getUnitById = exports.getUnits = exports.createUnit = exports.nameUnit = void 0;
 // eslint-disable-next-line import/no-extraneous-dependencies
 const express_async_handler_1 = __importDefault(require("express-async-handler"));
 const unitModel_1 = require("../../models/unitModel");
@@ -151,19 +151,36 @@ exports.getUnits = (0, express_async_handler_1.default)(async (req, res) => {
         let query = unitModel_1.UnitModel.find(filters);
         // Apply sorting
         query = query.sort(sort);
-        // Apply population
-        if (populate && populate.length > 0) {
-            populate.forEach((field) => {
-                query = query.populate(field);
-            });
+        // Normalize select (support comma or space separated)
+        let finalSelect = select;
+        if (typeof finalSelect === 'string') {
+            finalSelect = finalSelect.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
         }
-        // Apply field selection
-        if (select) {
-            query = query.select(select);
+        // Determine all ref paths in schema (for auto-populate fallback)
+        const schemaRefPaths = Object.entries(unitModel_1.UnitModel.schema.paths)
+            .filter(([, pathSchema]) => pathSchema?.options?.ref)
+            .map(([name]) => name);
+        // Requested populate or auto
+        const requestedPopulate = Array.isArray(populate) && populate.length > 0 ? populate : schemaRefPaths;
+        // Ensure that when selecting specific fields, local ref id fields needed for populate are included BEFORE applying select
+        if (finalSelect) {
+            const tokens = new Set(finalSelect.split(' ').filter(Boolean));
+            const hasExclusions = Array.from(tokens).some((t) => t.startsWith('-'));
+            // Only auto-include populate paths for inclusion-type selects
+            if (!hasExclusions && requestedPopulate.length > 0) {
+                for (const p of requestedPopulate)
+                    tokens.add(p);
+            }
+            finalSelect = Array.from(tokens).join(' ');
+            query = query.select(finalSelect);
+        }
+        // Apply population AFTER select so Mongoose still has the id field values (select above ensured inclusion)
+        for (const field of requestedPopulate) {
+            query = query.populate({ path: field });
         }
         // Execute queries in parallel for better performance
         const [units, totalCount, analytics] = await Promise.all([
-            query.skip(pagination.skip).limit(pagination.limit).exec(),
+            query.skip(pagination.skip).limit(pagination.limit).lean(false).exec(),
             unitModel_1.UnitModel.countDocuments(filters),
             includeAnalytics ? getUnitsAnalytics(filters) : Promise.resolve(null)
         ]);
@@ -199,7 +216,8 @@ exports.getUnits = (0, express_async_handler_1.default)(async (req, res) => {
             meta: {
                 requestedBy: user.userName?.slug || user.email,
                 timestamp: new Date().toISOString(),
-                filters: Object.keys(filters).length > 1 ? filters : undefined // Exclude userID from display
+                filters: Object.keys(filters).length > 1 ? filters : undefined, // Exclude userID from display
+                populatedPaths: requestedPopulate
             }
         };
         if (analytics) {
@@ -269,9 +287,15 @@ exports.getUnitById = (0, express_async_handler_1.default)(async (req, res) => {
         if (user.role !== 'admin') {
             filter.userID = user._id;
         }
-        const unit = await unitModel_1.UnitModel.findOne(filter)
-            .populate('unitTypeID')
-            .populate('uniteGroupID');
+        // Auto-populate all referenced fields defined in schema
+        const schemaRefPaths = Object.entries(unitModel_1.UnitModel.schema.paths)
+            .filter(([, pathSchema]) => pathSchema?.options?.ref)
+            .map(([name]) => name);
+        let docQuery = unitModel_1.UnitModel.findOne(filter);
+        for (const path of schemaRefPaths) {
+            docQuery = docQuery.populate({ path });
+        }
+        const unit = await docQuery;
         if (!unit) {
             res.status(404).json({
                 success: false,
@@ -373,6 +397,99 @@ exports.updateUnit = (0, express_async_handler_1.default)(async (req, res) => {
     catch (error) {
         console.error('Error updating unit:', error);
         res.status(500).json({ message: 'Failed to update unit', error });
+    }
+});
+// ---- Special Prices Handlers ----
+exports.addSpecialPrices = (0, express_async_handler_1.default)(async (req, res) => {
+    try {
+        const user = req.user;
+        const unitId = req.params.id;
+        if (!unitId || !mongoose_1.Types.ObjectId.isValid(unitId)) {
+            res.status(400).json({ success: false, message: 'Valid Unit ID is required', code: 'INVALID_UNIT_ID' });
+            return;
+        }
+        const payload = Array.isArray(req.body) ? req.body : req.body?.specialPrices;
+        if (!Array.isArray(payload)) {
+            res.status(400).json({ success: false, message: 'specialPrices array required' });
+            return;
+        }
+        // Basic validation
+        const sanitized = payload.map((sp) => ({
+            type: sp.type,
+            dayOfWeek: sp.dayOfWeek,
+            date: sp.date ? new Date(sp.date) : undefined,
+            price: sp.price,
+        }));
+        const unit = await unitModel_1.UnitModel.findOne({ _id: unitId, userID: user._id });
+        if (!unit) {
+            res.status(404).json({ success: false, message: 'Unit not found' });
+            return;
+        }
+        // Merge logic: replace existing rules of same (once date / weekly dayOfWeek)
+        sanitized.forEach((rule) => {
+            if (rule.type === 'once' && rule.date) {
+                const ruleDateStr = rule.date.toISOString().slice(0, 10);
+                unit.specialPrices = unit.specialPrices.filter((sp) => !(sp.type === 'once' && sp.date && sp.date.toISOString().slice(0, 10) === ruleDateStr));
+            }
+            if (rule.type === 'weekly' && rule.dayOfWeek) {
+                unit.specialPrices = unit.specialPrices.filter((sp) => !(sp.type === 'weekly' && sp.dayOfWeek === rule.dayOfWeek));
+            }
+            unit.specialPrices.push(rule);
+        });
+        await unit.save();
+        res.json({ success: true, data: unit.specialPrices });
+    }
+    catch (err) {
+        console.error('Error adding special prices', err);
+        res.status(500).json({ success: false, message: 'Failed to add special prices' });
+    }
+});
+exports.deleteSpecialPrice = (0, express_async_handler_1.default)(async (req, res) => {
+    try {
+        const user = req.user;
+        const unitId = req.params.id;
+        const spId = req.params.spId;
+        if (!unitId || !mongoose_1.Types.ObjectId.isValid(unitId) || !spId) {
+            res.status(400).json({ success: false, message: 'Valid Unit ID and special price ID are required' });
+            return;
+        }
+        const unit = await unitModel_1.UnitModel.findOne({ _id: unitId, userID: user._id });
+        if (!unit) {
+            res.status(404).json({ success: false, message: 'Unit not found' });
+            return;
+        }
+        const before = unit.specialPrices.length;
+        unit.specialPrices = unit.specialPrices.filter((sp) => sp._id?.toString() !== spId);
+        if (unit.specialPrices.length === before) {
+            res.status(404).json({ success: false, message: 'Special price not found' });
+            return;
+        }
+        await unit.save();
+        res.json({ success: true, data: unit.specialPrices });
+    }
+    catch (err) {
+        console.error('Error deleting special price', err);
+        res.status(500).json({ success: false, message: 'Failed to delete special price' });
+    }
+});
+exports.listSpecialPrices = (0, express_async_handler_1.default)(async (req, res) => {
+    try {
+        const user = req.user;
+        const unitId = req.params.id;
+        if (!unitId || !mongoose_1.Types.ObjectId.isValid(unitId)) {
+            res.status(400).json({ success: false, message: 'Valid Unit ID is required' });
+            return;
+        }
+        const unit = await unitModel_1.UnitModel.findOne({ _id: unitId, userID: user._id }).select('specialPrices');
+        if (!unit) {
+            res.status(404).json({ success: false, message: 'Unit not found' });
+            return;
+        }
+        res.json({ success: true, data: unit.specialPrices || [] });
+    }
+    catch (err) {
+        console.error('Error listing special prices', err);
+        res.status(500).json({ success: false, message: 'Failed to list special prices' });
     }
 });
 exports.deleteUnit = (0, express_async_handler_1.default)(async (req, res) => {

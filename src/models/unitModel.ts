@@ -13,6 +13,27 @@ const locationSchema = new Schema(
   },
   { _id: false },
 );
+const specialPriceSchema = new Schema(
+  {
+    type: { type: String, enum: ['weekly', 'once', 'monthly'], required: true },
+    dayOfWeek: {
+      type: String,
+      enum: [
+        'Sunday',
+        'Monday',
+        'Tuesday',
+        'Wednesday',
+        'Thursday',
+        'Friday',
+        'Saturday',
+      ],
+    },
+    date: { type: Date },
+    price: { type: Number, min: 0, required: true },
+  },
+  { _id: true, timestamps: false },
+);
+
 export const unitSchema = new Schema<IUnit>(
   {
     uniteGroupID: {
@@ -38,6 +59,7 @@ export const unitSchema = new Schema<IUnit>(
       enum: ['available', 'reserved', 'under_maintenance'],
       default: 'available',
     },
+  specialPrices: { type: [specialPriceSchema], default: [] },
   },
   {
     timestamps: true,

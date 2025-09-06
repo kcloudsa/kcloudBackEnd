@@ -6,6 +6,9 @@ import {
   getUnitById,
   getUnits,
   updateUnit,
+  addSpecialPrices,
+  deleteSpecialPrice,
+  listSpecialPrices,
 } from '../../services/unitServices';
 import {
   createUnitType,
@@ -105,6 +108,15 @@ router
   .get(enforceUserOwnership('unit'), getUnitById)
   .patch(enforceUserOwnership('unit'), updateUnit)
   .delete(enforceUserOwnership('unit'), deleteUnit);
+
+// Special prices sub-routes
+router
+  .route('/:id/special-prices')
+  .get(enforceUserOwnership('unit'), listSpecialPrices)
+  .post(enforceUserOwnership('unit'), addSpecialPrices);
+router
+  .route('/:id/special-prices/:spId')
+  .delete(enforceUserOwnership('unit'), deleteSpecialPrice);
 
 // Unit-specific moves routes (moves for a specific unit)
 router
